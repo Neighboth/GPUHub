@@ -9,6 +9,7 @@ import {
   RotateCw,
   ChevronRight,
   AlertTriangle,
+  Unplug,
 } from 'lucide-react';
 import {
   api,
@@ -22,6 +23,7 @@ import {
   type ProxyItem,
   type Settings,
 } from '../api';
+import ProviderIcon from '../components/ProviderIcon';
 import {
   Button,
   Card,
@@ -33,7 +35,6 @@ import {
   Select,
   Label,
   Toggle,
-  Meter,
   Table,
   THead,
   TBody,
@@ -45,10 +46,12 @@ import {
   EmptyState,
 } from '../components/ui';
 import { useToast } from '../components/Toast';
+import { useLang, L } from '../i18n';
 import { fmtDateTime, isFuture } from '../lib/format';
 
 export default function Keys() {
   const toast = useToast();
+  const lang = useLang();
 
   const [items, setItems] = useState<ApiKey[]>([]);
   const [proxies, setProxies] = useState<ProxyItem[]>([]);
@@ -69,7 +72,6 @@ export default function Keys() {
   const [deleteTarget, setDeleteTarget] = useState<ApiKey | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Admin gating for proxy reassignment: hide for explicitly non-admin roles.
   const role = getStoredUser()?.role;
   const isAdmin = !role || role === 'admin';
 
@@ -87,12 +89,12 @@ export default function Keys() {
         setProxies(px);
         setSettings(s);
       })
-      .catch((e) => setError(errorMessage(e, 'Failed to load keys')))
+      .catch((e) => setError(errorMessage(e, lang === 'tr' ? 'Anahtarlar yüklenemedi' : 'Failed to load keys')))
       .finally(() => {
         setLoading(false);
         setRefreshing(false);
       });
-  }, []);
+  }, [lang]);
 
   useEffect(() => {
     load();
@@ -103,10 +105,15 @@ export default function Keys() {
     setItems((prev) => prev.map((x) => (x.id === k.id ? { ...x, active: next } : x)));
     try {
       await api.updateKey(k.id, next);
-      toast(`Key “${k.label}” ${next ? 'activated' : 'deactivated'}`, 'success');
+      toast(
+        lang === 'tr'
+          ? `${k.label} ${next ? 'etkinleştirildi' : 'devre dışı bırakıldı'}`
+          : `${k.label} ${next ? 'activated' : 'deactivated'}`,
+        'success',
+      );
     } catch (e) {
       setItems((prev) => prev.map((x) => (x.id === k.id ? { ...x, active: !next } : x)));
-      toast(errorMessage(e, 'Failed to update key'), 'error');
+      toast(errorMessage(e, lang === 'tr' ? 'Güncellenemedi' : 'Failed to update key'), 'error');
     } finally {
       setToggleBusy(null);
     }
@@ -119,7 +126,7 @@ export default function Keys() {
       toast(`${k.label}: ${resultSummary(res)}`, 'success');
       load(false);
     } catch (e) {
-      toast(`${k.label} test failed: ${errorMessage(e)}`, 'error');
+      toast(`${k.label} ${lang === 'tr' ? 'test başarısız' : 'test failed'}: ${errorMessage(e)}`, 'error');
     } finally {
       setTestingId(null);
     }
@@ -131,15 +138,21 @@ export default function Keys() {
   }
 
   async function submitReassign() {
-    if (!reassignTarget || !reassignProxyId) return;
+    if (!reassignTarget) return;
     setReassigning(true);
     try {
-      await api.reassignKeyProxy(reassignTarget.id, reassignProxyId);
-      toast(`Proxy binding updated for “${reassignTarget.label}”`, 'success');
+      // Empty selection = unbind (key switches to direct egress).
+      await api.reassignKeyProxy(reassignTarget.id, reassignProxyId === '' ? '0' : reassignProxyId);
+      toast(
+        lang === 'tr'
+          ? `${reassignTarget.label} için proxy bağlaması güncellendi`
+          : `Proxy binding updated for ${reassignTarget.label}`,
+        'success',
+      );
       setReassignTarget(null);
       load(false);
     } catch (e) {
-      toast(errorMessage(e, 'Failed to reassign proxy'), 'error');
+      toast(errorMessage(e, lang === 'tr' ? 'Proxy yeniden atanamadı' : 'Failed to reassign proxy'), 'error');
     } finally {
       setReassigning(false);
     }
@@ -150,11 +163,11 @@ export default function Keys() {
     setDeleting(true);
     try {
       await api.deleteKey(deleteTarget.id);
-      toast(`Key “${deleteTarget.label}” deleted`, 'success');
+      toast(lang === 'tr' ? `${deleteTarget.label} silindi` : `${deleteTarget.label} deleted`, 'success');
       setDeleteTarget(null);
       load(false);
     } catch (e) {
-      toast(errorMessage(e, 'Failed to delete key'), 'error');
+      toast(errorMessage(e, lang === 'tr' ? 'Anahtar silinemedi' : 'Failed to delete key'), 'error');
     } finally {
       setDeleting(false);
     }
@@ -165,12 +178,16 @@ export default function Keys() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-zinc-50">Keys</h1>
-          <p className="text-xs text-zinc-500">Every provider credential managed by this GPUHub instance.</p>
+          <h1 className="text-xl font-bold tracking-tight text-zinc-50">
+            {L(lang, { en: 'Keys', tr: 'Anahtarlar' })}
+          </h1>
+          <p className="text-xs text-zinc-500">
+            {L(lang, { en: 'Every provider credential managed by this GPUHub instance.', tr: 'Bu GPUHub örneğinin yönettiği tüm sağlayıcı credential’ları.' })}
+          </p>
         </div>
         <Button size="sm" variant="outline" onClick={() => load(false)} loading={refreshing}>
           <RefreshCw size={14} />
-          Refresh
+          {L(lang, { en: 'Refresh', tr: 'Yenile' })}
         </Button>
       </div>
 
@@ -178,47 +195,54 @@ export default function Keys() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <RotateCw size={14} className="text-emerald-400" /> Rotation strategy
+            <RotateCw size={14} className="text-emerald-400" /> {L(lang, { en: 'Rotation strategy', tr: 'Rotation stratejisi' })}
           </CardTitle>
           <Link
             to="/settings"
             className="flex items-center gap-0.5 text-[11px] font-medium uppercase tracking-wider text-emerald-400 hover:text-emerald-300"
           >
-            Configure in Settings <ChevronRight size={12} />
+            {L(lang, { en: 'Configure in Settings', tr: 'Ayarlar’da yapılandır' })} <ChevronRight size={12} />
           </Link>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-x-10 gap-y-3">
           <div>
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Key rotation</div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+              {L(lang, { en: 'Key rotation', tr: 'Anahtar rotation’ı' })}
+            </div>
             <div className="mt-1">
               <Badge variant="accent">{settings?.rotation_strategy ?? '—'}</Badge>
             </div>
           </div>
           <div>
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Scheduler</div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+              {L(lang, { en: 'Scheduler', tr: 'Scheduler' })}
+            </div>
             <div className="mt-1">
               <Badge variant="info">{settings?.scheduler_strategy ?? '—'}</Badge>
             </div>
           </div>
           <p className="max-w-md text-[11px] leading-relaxed text-zinc-500">
-            Read-only view. Change strategies under Settings — rotation is applied on every scheduling cycle.
+            {L(lang, {
+              en: 'Read-only view. Rotation picks WHICH key (never the proxy). Every rotation strategy is explained in Settings → Rotation & scheduler.',
+              tr: 'Salt-okunur görünüm. Rotation HANGİ anahtarı seçeceğini belirler (asla proxy’yi değil). Tüm stratejilerin açıklaması: Ayarlar → Rotation & scheduler.',
+            })}
           </p>
         </CardContent>
       </Card>
 
       {loading ? (
-        <LoadingBlock label="Loading keys…" />
+        <LoadingBlock label={L(lang, { en: 'Loading keys…', tr: 'Anahtarlar yükleniyor…' })} />
       ) : error ? (
         <ErrorBlock message={error} onRetry={() => load()} />
       ) : items.length === 0 ? (
         <EmptyState
           icon={KeyRound}
-          title="No keys yet"
-          subtitle="Add a key from the Providers page. Keys without a bound proxy remain disabled."
+          title={L(lang, { en: 'No keys yet', tr: 'Henüz anahtar yok' })}
+          subtitle={L(lang, { en: 'Add a key from the Providers page (proxy optional).', tr: 'Providers sayfasından bir anahtar ekleyin (proxy opsiyonel).' })}
           action={
             <Link to="/providers">
               <Button size="sm" variant="primary">
-                Go to Providers <ChevronRight size={14} />
+                {L(lang, { en: 'Go to Providers', tr: 'Sağlayıcılara git' })} <ChevronRight size={14} />
               </Button>
             </Link>
           }
@@ -227,18 +251,18 @@ export default function Keys() {
         <Table>
           <THead>
             <Tr>
-              <Th>Label</Th>
-              <Th>Provider</Th>
+              <Th>{L(lang, { en: 'Label', tr: 'Etiket' })}</Th>
+              <Th>{L(lang, { en: 'Provider', tr: 'Sağlayıcı' })}</Th>
               <Th>Credential</Th>
-              <Th>Bound proxy</Th>
-              <Th>Pri</Th>
-              <Th>Daily quota</Th>
-              <Th>Weekly quota</Th>
-              <Th>Last used</Th>
-              <Th>Errors</Th>
-              <Th>Cooldown until</Th>
-              <Th>Active</Th>
-              <Th className="text-right">Actions</Th>
+              <Th>{L(lang, { en: 'Bound proxy', tr: 'Bağlı proxy' })}</Th>
+              <Th>{L(lang, { en: 'Pri', tr: 'Öncelik' })}</Th>
+              <Th>{L(lang, { en: 'Daily quota', tr: 'Günlük kota' })}</Th>
+              <Th>{L(lang, { en: 'Weekly quota', tr: 'Haftalık kota' })}</Th>
+              <Th>{L(lang, { en: 'Last used', tr: 'Son kullanım' })}</Th>
+              <Th>{L(lang, { en: 'Errors', tr: 'Hatalar' })}</Th>
+              <Th>{L(lang, { en: 'Cooldown until', tr: 'Cooldown bitişi' })}</Th>
+              <Th>{L(lang, { en: 'Active', tr: 'Aktif' })}</Th>
+              <Th className="text-right">{L(lang, { en: 'Actions', tr: 'İşlemler' })}</Th>
             </Tr>
           </THead>
           <TBody>
@@ -254,9 +278,14 @@ export default function Keys() {
                     <div className="max-w-[140px] truncate text-xs font-semibold text-zinc-100" title={k.label}>
                       {k.label}
                     </div>
-                    <code className="text-[10px] text-zinc-600">{k.id.slice(0, 8)}</code>
+                    <code className="text-[10px] text-zinc-600">{String(k.id).slice(0, 8)}</code>
                   </Td>
-                  <Td className="text-xs text-zinc-300">{k.provider_name ?? k.provider ?? '—'}</Td>
+                  <Td className="text-xs text-zinc-300">
+                    <span className="flex items-center gap-2">
+                      <ProviderIcon id={k.provider_id ?? ''} size={14} />
+                      {k.provider_name ?? k.provider ?? k.provider_id ?? '—'}
+                    </span>
+                  </Td>
                   <Td>
                     <code className="text-[10px] text-zinc-500">{keyMaskedCredential(k)}</code>
                   </Td>
@@ -264,18 +293,14 @@ export default function Keys() {
                     {proxyLabel ? (
                       <span className="text-xs text-zinc-300">{proxyLabel}</span>
                     ) : (
-                      <Badge variant="danger" className="border-red-500/40">
-                        NO PROXY — disabled
+                      <Badge variant="neutral">
+                        {L(lang, { en: 'Direct (no proxy)', tr: 'Direkt (proxy yok)' })}
                       </Badge>
                     )}
                   </Td>
                   <Td className="tabular-nums text-xs text-zinc-400">{k.priority ?? '—'}</Td>
-                  <Td className="min-w-[110px]">
-                    <QuotaCell used={k.daily_used} quota={k.daily_quota} />
-                  </Td>
-                  <Td className="min-w-[110px]">
-                    <QuotaCell used={k.weekly_used} quota={k.weekly_quota} />
-                  </Td>
+                  <Td className="min-w-[110px]"><QuotaCell used={k.usage_today} quota={k.daily_quota} /></Td>
+                  <Td className="min-w-[110px]"><QuotaCell used={k.usage_week} quota={k.weekly_quota} /></Td>
                   <Td className="text-[11px] text-zinc-500">{k.last_used_at ? fmtDateTime(k.last_used_at) : '—'}</Td>
                   <Td>
                     {errors > 0 ? (
@@ -298,40 +323,24 @@ export default function Keys() {
                       checked={active}
                       onChange={(next) => onToggle(k, next)}
                       disabled={toggleBusy === k.id}
-                      label={`Toggle ${k.label}`}
+                      label={L(lang, { en: `Toggle ${k.label}`, tr: `${k.label} aç/kapat` })}
                     />
                   </Td>
                   <Td>
                     <div className="flex items-center justify-end gap-1">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => onTest(k)}
-                        loading={testingId === k.id}
-                        title="Test key"
-                        aria-label="Test key"
-                      >
+                      <Button size="sm" variant="ghost" onClick={() => onTest(k)} loading={testingId === k.id}
+                        title={L(lang, { en: 'Test key', tr: 'Anahtarı test et' })} aria-label="Test key">
                         <FlaskConical size={14} />
                       </Button>
                       {isAdmin && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => openReassign(k)}
-                          title="Reassign proxy (admin)"
-                          aria-label="Reassign proxy"
-                        >
+                        <Button size="sm" variant="ghost" onClick={() => openReassign(k)}
+                          title={L(lang, { en: 'Bind / unbind proxy (admin)', tr: 'Proxy ata / kaldır (admin)' })} aria-label="Reassign proxy">
                           <ArrowRightLeft size={14} />
                         </Button>
                       )}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                      <Button size="sm" variant="ghost" className="text-red-400 hover:bg-red-500/10 hover:text-red-300"
                         onClick={() => setDeleteTarget(k)}
-                        title="Delete key"
-                        aria-label="Delete key"
-                      >
+                        title={L(lang, { en: 'Delete key', tr: 'Anahtarı sil' })} aria-label="Delete key">
                         <Trash2 size={14} />
                       </Button>
                     </div>
@@ -347,14 +356,17 @@ export default function Keys() {
       <Modal
         open={!!reassignTarget}
         onClose={() => setReassignTarget(null)}
-        title="Reassign proxy"
+        title={L(lang, { en: 'Bind / unbind proxy', tr: 'Proxy ata / kaldır' })}
         footer={
           <>
             <Button variant="ghost" onClick={() => setReassignTarget(null)}>
-              Cancel
+              {L(lang, { en: 'Cancel', tr: 'Vazgeç' })}
             </Button>
-            <Button variant="warning" onClick={submitReassign} loading={reassigning} disabled={!reassignProxyId}>
-              <ArrowRightLeft size={14} /> Reassign permanently
+            <Button variant="warning" onClick={submitReassign} loading={reassigning}>
+              <ArrowRightLeft size={14} />
+              {reassignProxyId === ''
+                ? L(lang, { en: 'Unbind (direct egress)', tr: 'Bağ kaldır (direkt çıkış)' })
+                : L(lang, { en: 'Bind permanently', tr: 'Kalıcı bağla' })}
             </Button>
           </>
         }
@@ -362,27 +374,27 @@ export default function Keys() {
         {reassignTarget && (
           <div className="space-y-4">
             <p className="text-sm text-zinc-300">
-              Rebinding <span className="font-semibold text-zinc-100">{reassignTarget.label}</span> to a new proxy.
+              {L(lang, { en: 'Proxy binding for', tr: 'Proxy bağlaması:' })}{' '}
+              <span className="font-semibold text-zinc-100">{reassignTarget.label}</span>
             </p>
-            <div className="flex items-start gap-2.5 rounded-lg border border-red-500/30 bg-red-500/[0.07] px-3 py-2.5 text-xs leading-relaxed text-red-300">
+            <div className="flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/[0.07] px-3 py-2.5 text-xs leading-relaxed text-amber-300">
               <AlertTriangle size={15} className="mt-0.5 shrink-0" />
               <span>
-                This is a permanent binding. Manual action only — the key keeps this proxy until an admin changes it
-                again. Free-tier providers ban reused credentials across egress IPs.
+                {L(lang, {
+                  en: 'Sticky binding: a bound proxy never rotates automatically — the key egresses through it forever until an admin changes it. Unbind to switch the key to direct egress.',
+                  tr: 'Sticky binding: bağlanan proxy asla otomatik rotate edilmez — anahtar sonsuza kadar aynı IP\'den çıkar, admin değiştirene kadar. Direkt çıkış istiyorsanız bağ kaldırın.',
+                })}
               </span>
             </div>
             <div>
-              <Label htmlFor="reassign-proxy">New proxy *</Label>
-              <Select
-                id="reassign-proxy"
-                value={reassignProxyId}
-                onChange={(e) => setReassignProxyId(e.target.value)}
-                disabled={reassigning}
-              >
-                <option value="">Select a proxy…</option>
+              <Label htmlFor="reassign-proxy">{L(lang, { en: 'Proxy', tr: 'Proxy' })}</Label>
+              <Select id="reassign-proxy" value={reassignProxyId} onChange={(e) => setReassignProxyId(e.target.value)} disabled={reassigning}>
+                <option value="">
+                  {L(lang, { en: '— Direct (unbind, no proxy)', tr: '— Direkt (bağ kaldır, proxy yok)' })}
+                </option>
                 {proxies.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.label} {p.country ? `· ${p.country}` : ''}
+                    #{p.id} — {p.label} {p.country ? `(${p.country})` : ''}
                   </option>
                 ))}
               </Select>
@@ -395,22 +407,24 @@ export default function Keys() {
       <Modal
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
-        title="Delete key"
+        title={L(lang, { en: 'Delete key', tr: 'Anahtarı sil' })}
         footer={
           <>
             <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
-              Cancel
+              {L(lang, { en: 'Cancel', tr: 'Vazgeç' })}
             </Button>
             <Button variant="danger" onClick={confirmDelete} loading={deleting}>
-              <Trash2 size={14} /> Delete key
+              <Trash2 size={14} /> {L(lang, { en: 'Delete key', tr: 'Anahtarı sil' })}
             </Button>
           </>
         }
       >
         {deleteTarget && (
           <p className="text-sm text-zinc-300">
-            Delete key <span className="font-semibold text-zinc-100">{deleteTarget.label}</span>? The credential is
-            permanently removed from this instance. This cannot be undone.
+            {L(lang, {
+              en: `Permanently delete "${deleteTarget.label}"? Any jobs already submitted with this key are not cancelled, but no new job will use it.`,
+              tr: `"${deleteTarget.label}" kalıcı olarak silinsin mi? Bu anahtarla gönderilmiş işler iptal edilmez ama yeni işlerde kullanılmaz.`,
+            })}
           </p>
         )}
       </Modal>
@@ -419,23 +433,26 @@ export default function Keys() {
 }
 
 function QuotaCell({ used, quota }: { used?: number | null; quota?: number | null }) {
-  if (quota == null) {
-    return <span className="text-xs text-zinc-600">{used != null ? `${used} used · no cap` : '—'}</span>;
-  }
   const u = used ?? 0;
-  const pct = quota > 0 ? (u / quota) * 100 : 0;
-  const tone = pct >= 90 ? 'red' : pct >= 70 ? 'amber' : 'emerald';
+  const q = quota ?? 0;
+  const lang = useLang();
   return (
-    <div className="w-28">
-      <div className="mb-1 flex items-center justify-between text-[10px] tabular-nums text-zinc-500">
-        <span>
-          {u}/{quota}
-        </span>
-        <span className={pct >= 90 ? 'text-red-400' : pct >= 70 ? 'text-amber-400' : 'text-zinc-500'}>
-          {pct.toFixed(0)}%
-        </span>
+    <div className="space-y-1">
+      <div className="flex items-center justify-between gap-2 text-[11px] tabular-nums text-zinc-400">
+        <span>{u} / {q > 0 ? q : '∞'}</span>
+        {q > 0 && <span className="text-zinc-600">{Math.round((u / q) * 100)}%</span>}
       </div>
-      <Meter value={u} max={quota} tone={tone} />
+      {q > 0 && (
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
+          <div
+            className={`h-full rounded-full ${u / q >= 0.9 ? 'bg-red-500' : u / q >= 0.7 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+            style={{ width: `${Math.min(100, (u / q) * 100)}%` }}
+          />
+        </div>
+      )}
+      <div className="hidden text-[10px] text-zinc-600">
+        {L(lang, { en: 'usage today (resets daily)', tr: 'bugünkü kullanım (günlük sıfırlanır)' })}
+      </div>
     </div>
   );
 }

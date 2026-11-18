@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log"
@@ -19,6 +17,7 @@ import (
 	"gpuhub/internal/crypto"
 	"gpuhub/internal/db"
 	"gpuhub/internal/jobs"
+	"gpuhub/internal/notify"
 	"gpuhub/internal/providers"
 	"gpuhub/internal/proxy"
 	"gpuhub/web"
@@ -70,22 +69,9 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	notify := func(level, msg string) {
-		_, _ = conn.ExecContext(context.Background(), `INSERT INTO notifications(level, message) VALUES(?,?)`, level, msg)
+	notifyFunc := func(level, msg string) {
+		notify.Notify(conn, cfg.NotifyWebhookURL, level, msg)
 		log.Printf("[notify:%s] %s", level, msg)
-		if cfg.NotifyWebhookURL != "" {
-			go func() {
-				body, _ := json.Marshal(map[string]string{"level": level, "message": msg, "source": "gpuhub"})
-				c, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				req, err := http.NewRequestWithContext(c, http.MethodPost, cfg.NotifyWebhookURL, bytes.NewReader(body))
-				if err != nil {
-					return
-				}
-				req.Header.Set("Content-Type", "application/json")
-				_, _ = http.DefaultClient.Do(req)
-			}()
-		}
 	}
 
 	// Seed provider catalog + bootstrap admin from env (first run only).
@@ -98,9 +84,9 @@ func main() {
 	}
 
 	// Background workers: scheduler + poller + proxy health checks (60s).
-	scheduler := jobs.New(conn, cfg, box, notify)
+	scheduler := jobs.New(conn, cfg, box, notifyFunc)
 	scheduler.Start(ctx)
-	go proxyMgr.HealthLoop(ctx, cfg.ProxyHealthInterval, cfg.ProxyHealthURL, cfg.ProxyHealthTimeout, notify)
+	go proxyMgr.HealthLoop(ctx, cfg.ProxyHealthInterval, cfg.ProxyHealthURL, cfg.ProxyHealthTimeout, notifyFunc)
 
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Port),

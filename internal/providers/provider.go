@@ -73,12 +73,14 @@ const (
 type JobSpec struct {
 	Type               JobType       `json:"type"`
 	Payload            string        `json:"payload"`
-	GPUType            string        `json:"gpu_type"` // canonical name or "any"
+	GPUType            string        `json:"gpu_type"`                    // canonical name or "any"
+	GPUTypeFallback    []string      `json:"gpu_type_fallback,omitempty"` // ordered fallbacks, e.g. ["A100","H100","L40S"]
 	MinVRAMGB          int           `json:"min_vram_gb"`
 	GPUCount           int           `json:"gpu_count"`
 	MaxDuration        time.Duration `json:"max_duration"`
 	ProviderPreference []string      `json:"provider_preference,omitempty"`
 	MaxCost            Money         `json:"max_cost_usd_micros"`
+	SessionRenew       bool          `json:"session_renew,omitempty"`
 }
 
 type RemoteJobID string
@@ -118,6 +120,7 @@ type CredentialPayload struct {
 	Token    string            `json:"token,omitempty"`
 	Username string            `json:"username,omitempty"`
 	Key      string            `json:"key,omitempty"`
+	BaseURL  string            `json:"base_url,omitempty"`
 	Extra    map[string]string `json:"extra,omitempty"`
 }
 
@@ -127,6 +130,20 @@ func ParseCredential(raw string) (CredentialPayload, error) {
 	if strings.HasPrefix(s, "{") {
 		if err := json.Unmarshal([]byte(s), &p); err != nil {
 			return p, fmt.Errorf("credential JSON invalid: %w", err)
+		}
+		// Accept "url" as an alias for base_url.
+		if p.BaseURL == "" {
+			if u, ok := p.Extra["url"]; ok {
+				p.BaseURL = u
+			}
+		}
+		// Accept top-level "url" (unknown field — parse manually).
+		if p.BaseURL == "" {
+			var withURL struct {
+				URL string `json:"url"`
+			}
+			_ = json.Unmarshal([]byte(s), &withURL)
+			p.BaseURL = withURL.URL
 		}
 		return p, nil
 	}

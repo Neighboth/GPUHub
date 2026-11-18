@@ -1,7 +1,6 @@
 package jobs
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -10,7 +9,6 @@ import (
 	"log"
 	"math"
 	"math/rand"
-	"net/http"
 	"sort"
 	"strings"
 	"time"
@@ -33,6 +31,7 @@ type Job struct {
 	Type               providers.JobType
 	Payload            string
 	GPUType            string
+	GPUFallback        []string
 	MinVRAMGB          int
 	GPUCount           int
 	MaxDurationSeconds int
@@ -45,6 +44,7 @@ type Job struct {
 	Attempts           int
 	CostMicros         int64
 	StartedAt          sql.NullTime
+	SessionRenew       bool
 }
 
 type candidate struct {
@@ -120,24 +120,29 @@ func (s *Scheduler) schedulePending(ctx context.Context) {
 
 func (s *Scheduler) loadJob(ctx context.Context, id int64) (*Job, error) {
 	j := &Job{}
-	var pref string
+	var pref, fallback string
+	var renew int
 	err := s.DB.QueryRowContext(ctx, `SELECT id,type,payload,gpu_type,min_vram_gb,gpu_count,max_duration_seconds,
-		provider_preference,max_cost_usd_micros,status,provider_id,key_id,remote_id,attempts,cost_usd_micros,started_at
+		provider_preference,max_cost_usd_micros,status,provider_id,key_id,remote_id,attempts,cost_usd_micros,started_at,gpu_fallback,session_renew
 		FROM jobs WHERE id=?`, id).Scan(&j.ID, &j.Type, &j.Payload, &j.GPUType, &j.MinVRAMGB, &j.GPUCount,
 		&j.MaxDurationSeconds, &pref, &j.MaxCostMicros, &j.Status, &j.ProviderID, &j.KeyID, &j.RemoteID,
-		&j.Attempts, &j.CostMicros, &j.StartedAt)
+		&j.Attempts, &j.CostMicros, &j.StartedAt, &fallback, &renew)
 	if err != nil {
 		return nil, err
 	}
+	j.SessionRenew = renew == 1
 	_ = json.Unmarshal([]byte(pref), &j.ProviderPreference)
+	_ = json.Unmarshal([]byte(fallback), &j.GPUFallback)
 	return j, nil
 }
 
 func (s *Scheduler) specOf(j *Job) providers.JobSpec {
 	return providers.JobSpec{
-		Type: j.Type, Payload: j.Payload, GPUType: j.GPUType, MinVRAMGB: j.MinVRAMGB,
-		GPUCount: j.GPUCount, MaxDuration: time.Duration(j.MaxDurationSeconds) * time.Second,
+		Type: j.Type, Payload: j.Payload, GPUType: j.GPUType, GPUTypeFallback: j.GPUFallback,
+		MinVRAMGB: j.MinVRAMGB,
+		GPUCount:  j.GPUCount, MaxDuration: time.Duration(j.MaxDurationSeconds) * time.Second,
 		ProviderPreference: j.ProviderPreference, MaxCost: providers.Money(j.MaxCostMicros),
+		SessionRenew: j.SessionRenew,
 	}
 }
 
@@ -265,7 +270,7 @@ func (s *Scheduler) scheduleOne(ctx context.Context, id int64) error {
 			tried-- // this skip does not consume retry budget
 			continue
 		}
-		remoteID, err := c.provider.Submit(ctx, cred, "", spec)
+		remoteID, err := c.provider.Submit(providers.WithJobContext(ctx, j.ID, j.Attempts+tried), cred, "", spec)
 		if err != nil {
 			s.onAttemptFailure(ctx, j, c, err)
 			lastErr = err.Error()
@@ -299,7 +304,7 @@ func (s *Scheduler) scheduleOne(ctx context.Context, id int64) error {
 // distinguish "soft" unavailability from structural rejection).
 func (s *Scheduler) loadEligibleKeys(ctx context.Context, providerID string, ignoreCooldown bool) ([]candidate, error) {
 	rows, err := s.DB.QueryContext(ctx, `SELECT id,label,priority,weight,usage_today,daily_quota,usage_week,weekly_quota,cooldown_until FROM provider_keys
-		WHERE provider_id=? AND active=1 AND bound_proxy_id IS NOT NULL
+		WHERE provider_id=? AND active=1
 		ORDER BY priority ASC, id ASC`, providerID)
 	if err != nil {
 		return nil, err
@@ -516,23 +521,6 @@ func (s *Scheduler) finishAttempt(ctx context.Context, jobID int64, status, errM
 
 func (s *Scheduler) audit(ctx context.Context, actor, action, detail string) {
 	_, _ = s.DB.ExecContext(ctx, `INSERT INTO audit_log(actor, action, detail) VALUES(?,?,?)`, actor, action, detail)
-}
-
-// TestAdapterNotify satisfies linters when webhook notify is exercised in tests.
-func TestAdapterNotify(cfg *config.Config) func(string, string) {
-	return func(level, msg string) {
-		if cfg.NotifyWebhookURL == "" {
-			return
-		}
-		go func() {
-			body, _ := json.Marshal(map[string]string{"level": level, "message": msg})
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			req, _ := http.NewRequestWithContext(ctx, http.MethodPost, cfg.NotifyWebhookURL, bytes.NewReader(body))
-			req.Header.Set("Content-Type", "application/json")
-			_, _ = http.DefaultClient.Do(req)
-		}()
-	}
 }
 
 func truncate(s string, n int) string {

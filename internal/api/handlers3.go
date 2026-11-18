@@ -1,10 +1,8 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -13,25 +11,38 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"gpuhub/internal/audit"
+	"gpuhub/internal/notify"
 	"gpuhub/internal/proxy"
 )
 
 // notify stores an admin notification and (optionally) fires the configured webhook.
+// Discord webhooks automatically get an embed payload.
 func (s *Server) notify(ctx context.Context, level, msg string) {
-	_, _ = s.db.ExecContext(ctx, `INSERT INTO notifications(level, message) VALUES(?,?)`, level, msg)
-	if s.cfg.NotifyWebhookURL != "" {
-		go func() {
-			body, _ := json.Marshal(map[string]string{"level": level, "message": msg, "source": "gpuhub"})
-			c, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			req, err := http.NewRequestWithContext(c, http.MethodPost, s.cfg.NotifyWebhookURL, bytes.NewReader(body))
-			if err != nil {
-				return
-			}
-			req.Header.Set("Content-Type", "application/json")
-			_, _ = http.DefaultClient.Do(req)
-		}()
+	notify.Notify(s.db, s.cfg.NotifyWebhookURL, level, msg)
+}
+
+// handleTestWebhook sends a test notification to the configured webhook (or the one passed in the body).
+func (s *Server) handleTestWebhook(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		URL string `json:"url"`
 	}
+	_ = decodeJSON(r, &req)
+	url := req.URL
+	if url == "" {
+		url = s.cfg.NotifyWebhookURL
+	}
+	if url == "" {
+		writeError(w, http.StatusBadRequest, "no webhook configured — set one first or pass {\"url\": \"...\"}")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+	if err := notify.SendWebhook(ctx, url, "info", "GPUHub test notification — webhook is wired up correctly."); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	audit.Log(r.Context(), s.db, userFrom(r.Context()).Username, "settings_webhook_test", "test webhook sent to "+maskURL(url))
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 // ---------- proxies ----------
@@ -54,9 +65,10 @@ func (s *Server) handleListProxies(w http.ResponseWriter, r *http.Request) {
 		var lastCheck sql.NullTime
 		var created time.Time
 		var keyID sql.NullInt64
-		var keyLabel, keyProvider string
+		var keyLabel, keyProvider sql.NullString
 		if err := rows.Scan(&id, &label, &encURL, &country, &health, &lastCheck, &checkErr, &created, &keyID, &keyLabel, &keyProvider); err != nil {
-			continue
+			writeError(w, http.StatusInternalServerError, "scan proxy row: "+err.Error())
+			return
 		}
 		rawURL, _ := s.revealProxyURL(encURL)
 		p := map[string]any{
@@ -66,8 +78,8 @@ func (s *Server) handleListProxies(w http.ResponseWriter, r *http.Request) {
 		}
 		if keyID.Valid {
 			p["bound_key_id"] = keyID.Int64
-			p["bound_key_label"] = keyLabel
-			p["bound_provider_id"] = keyProvider
+			p["bound_key_label"] = keyLabel.String
+			p["bound_provider_id"] = keyProvider.String
 		}
 		out = append(out, p)
 	}

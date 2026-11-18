@@ -160,6 +160,7 @@ func (s *Server) routes() *chi.Mux {
 			r.Get("/settings", s.handleGetSettings)
 			r.Patch("/settings", s.adminOnly(s.handleUpdateSettings))
 			r.Post("/settings/rotate-master-key", s.adminOnly(s.handleRotateMasterKey))
+			r.Post("/settings/test-webhook", s.adminOnly(s.handleTestWebhook))
 		})
 	})
 

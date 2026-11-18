@@ -166,7 +166,16 @@ func (m *Manager) TransportForKey(ctx context.Context, keyID int64) (*http.Trans
 		return nil, "", err
 	}
 	if !proxyID.Valid {
-		return nil, "", fmt.Errorf("key %d has no proxy bound (sticky binding broken); refusing to make unproxied call", keyID)
+		// Direct egress is allowed — sticky binding applies only to BOUND proxies.
+		m.cacheMu.Lock()
+		if t, ok := m.cache[keyID]; ok {
+			m.cacheMu.Unlock()
+			return t, "", nil
+		}
+		t := &http.Transport{MaxIdleConns: 10, IdleConnTimeout: 90 * time.Second, TLSHandshakeTimeout: 15 * time.Second, ResponseHeaderTimeout: 45 * time.Second}
+		m.cache[keyID] = t
+		m.cacheMu.Unlock()
+		return t, "", nil
 	}
 	rawURL, err := m.resolveURL(proxyURL)
 	if err != nil {

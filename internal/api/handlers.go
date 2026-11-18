@@ -274,8 +274,9 @@ func (s *Server) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "credential is required")
 		return
 	}
-	if req.BoundProxyID == 0 {
-		writeError(w, http.StatusBadRequest, "bound_proxy_id is required — every key must have a permanent sticky proxy binding")
+	// Bound proxy is OPTIONAL — keys without a proxy use direct egress (no sticky binding).
+	if req.BoundProxyID < 0 {
+		writeError(w, http.StatusBadRequest, "bound_proxy_id must be >= 1 (or omit to bind no proxy)")
 		return
 	}
 	if req.Priority == 0 {
@@ -299,24 +300,32 @@ func (s *Server) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 	var proxyLabel string
-	if err := tx.QueryRowContext(r.Context(), `SELECT label FROM proxies WHERE id=?`, req.BoundProxyID).Scan(&proxyLabel); err != nil {
-		writeError(w, http.StatusBadRequest, "bound_proxy_id does not exist")
-		return
+	if req.BoundProxyID != 0 {
+		if err := tx.QueryRowContext(r.Context(), `SELECT label FROM proxies WHERE id=?`, req.BoundProxyID).Scan(&proxyLabel); err != nil {
+			writeError(w, http.StatusBadRequest, "bound_proxy_id does not exist")
+			return
+		}
+		var boundTo sql.NullInt64
+		var boundLabel string
+		row := tx.QueryRowContext(r.Context(), `SELECT id, label FROM provider_keys WHERE bound_proxy_id=?`, req.BoundProxyID)
+		if err := row.Scan(&boundTo, &boundLabel); err == nil {
+			writeJSON(w, http.StatusConflict, map[string]any{
+				"error":           "proxy already bound to another key (1:1 sticky binding)",
+				"bound_key_id":    boundTo.Int64,
+				"bound_key_label": boundLabel,
+				"hint":            "choose a different proxy, or reassign via PATCH /keys/{key_id}/proxy with force=true (admin approval)",
+			})
+			return
+		}
+	} else {
+		proxyLabel = "(direct)"
 	}
-	var boundTo sql.NullInt64
-	var boundLabel string
-	row := tx.QueryRowContext(r.Context(), `SELECT id, label FROM provider_keys WHERE bound_proxy_id=?`, req.BoundProxyID)
-	if err := row.Scan(&boundTo, &boundLabel); err == nil {
-		writeJSON(w, http.StatusConflict, map[string]any{
-			"error":           "proxy already bound to another key (1:1 sticky binding)",
-			"bound_key_id":    boundTo.Int64,
-			"bound_key_label": boundLabel,
-			"hint":            "choose a different proxy, or reassign via PATCH /keys/{key_id}/proxy with force=true (admin approval)",
-		})
-		return
+	var proxyArg any = req.BoundProxyID
+	if req.BoundProxyID == 0 {
+		proxyArg = nil
 	}
 	res, err := tx.ExecContext(r.Context(), `INSERT INTO provider_keys(provider_id,label,credential_enc,bound_proxy_id,active,daily_quota,weekly_quota,priority,weight)
-		VALUES(?,?,?,?,1,?,?,?,?)`, providerID, req.Label, enc, req.BoundProxyID, req.DailyQuota, req.WeeklyQuota, req.Priority, req.Weight)
+		VALUES(?,?,?,?,1,?,?,?,?)`, providerID, req.Label, enc, proxyArg, req.DailyQuota, req.WeeklyQuota, req.Priority, req.Weight)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
 			writeError(w, http.StatusConflict, "proxy already bound to another key (1:1 sticky binding)")
@@ -330,9 +339,13 @@ func (s *Server) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	bindDesc := fmt.Sprint(req.BoundProxyID)
+	if req.BoundProxyID == 0 {
+		bindDesc = "none (direct)"
+	}
 	audit.Log(r.Context(), s.db, userFrom(r.Context()).Username, "key_create",
-		fmt.Sprintf("provider=%s key_id=%d label=%s proxy_id=%d", providerID, keyID, req.Label, req.BoundProxyID))
-	writeJSON(w, http.StatusCreated, map[string]any{"id": keyID, "provider_id": providerID, "label": req.Label, "bound_proxy_id": req.BoundProxyID})
+		fmt.Sprintf("provider=%s key_id=%d label=%s proxy_id=%s", providerID, keyID, req.Label, bindDesc))
+	writeJSON(w, http.StatusCreated, map[string]any{"id": keyID, "provider_id": providerID, "label": req.Label, "bound_proxy_id": proxyArg})
 }
 
 func (s *Server) testKey(ctx context.Context, keyID int64, providerID string) error {

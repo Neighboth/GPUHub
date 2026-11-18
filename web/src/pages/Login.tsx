@@ -1,13 +1,17 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Gpu, Eye, EyeOff, Loader2, ShieldCheck, UserPlus, LogIn } from 'lucide-react';
+import { Eye, EyeOff, Loader2, ShieldCheck, UserPlus, LogIn, Globe } from 'lucide-react';
 import { api, errorMessage, getAccessToken } from '../api';
+import Logo from '../components/Logo';
 import { Button, Input, Label, FieldError } from '../components/ui';
 import { useToast } from '../components/Toast';
+import { useLang, useSetLang, L, type Lang } from '../i18n';
 
 export default function Login() {
   const navigate = useNavigate();
   const toast = useToast();
+  const lang = useLang();
+  const setLang = useSetLang();
 
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
   const [statusError, setStatusError] = useState('');
@@ -19,7 +23,6 @@ export default function Login() {
   const [formError, setFormError] = useState('');
 
   useEffect(() => {
-    // Already signed in? Go straight to the dashboard.
     if (getAccessToken()) {
       navigate('/', { replace: true });
       return;
@@ -33,13 +36,13 @@ export default function Login() {
       .catch((e) => {
         if (!cancelled) {
           setNeedsSetup(false);
-          setStatusError(errorMessage(e, 'Could not reach the GPUHub API'));
+          setStatusError(errorMessage(e, lang === 'tr' ? 'GPUHub API’ye ulaşılamadı' : 'Could not reach the GPUHub API'));
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [navigate]);
+  }, [navigate, lang]);
 
   const isSetup = needsSetup === true;
 
@@ -48,15 +51,15 @@ export default function Login() {
     setFormError('');
 
     if (!username.trim() || !password) {
-      setFormError('Username and password are required.');
+      setFormError(L(lang, { en: 'Username and password are required.', tr: 'Kullanıcı adı ve şifre gerekli.' }));
       return;
     }
     if (isSetup && password !== confirm) {
-      setFormError('Passwords do not match.');
+      setFormError(L(lang, { en: 'Passwords do not match.', tr: 'Şifreler eşleşmiyor.' }));
       return;
     }
     if (isSetup && password.length < 8) {
-      setFormError('Password must be at least 8 characters.');
+      setFormError(L(lang, { en: 'Password must be at least 8 characters.', tr: 'Şifre en az 8 karakter olmalı.' }));
       return;
     }
 
@@ -64,18 +67,20 @@ export default function Login() {
     try {
       if (isSetup) {
         await api.setup({ username: username.trim(), password, confirm });
-        toast('Admin account created — please sign in', 'success');
+        toast(L(lang, { en: 'Admin account created — please sign in', tr: 'Admin hesabı oluşturuldu — giriş yapın' }), 'success');
         setNeedsSetup(false);
         setPassword('');
         setConfirm('');
         setFormError('');
       } else {
         await api.login(username.trim(), password);
-        toast(`Welcome back, ${username.trim()}`, 'success');
+        toast(L(lang, { en: `Welcome back, ${username.trim()}`, tr: `Tekrar hoş geldiniz, ${username.trim()}` }), 'success');
         navigate('/', { replace: true });
       }
     } catch (err) {
-      setFormError(errorMessage(err, isSetup ? 'Setup failed' : 'Invalid credentials'));
+      setFormError(
+        errorMessage(err, isSetup ? L(lang, { en: 'Setup failed', tr: 'Kurulum başarısız' }) : L(lang, { en: 'Invalid credentials', tr: 'Geçersiz kullanıcı adı/şifre' })),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -83,6 +88,16 @@ export default function Login() {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-zinc-950 px-4">
+      {/* Language toggle (top-right) */}
+      <button
+        onClick={() => setLang(lang === 'en' ? 'tr' : 'en')}
+        className="absolute right-4 top-4 z-10 flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900/80 px-2.5 py-2 text-xs font-semibold text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-100"
+        aria-label="Switch language"
+      >
+        <Globe size={14} />
+        <span className="uppercase">{lang}</span>
+      </button>
+
       {/* Ambient background */}
       <div
         aria-hidden
@@ -105,14 +120,17 @@ export default function Login() {
       <div className="relative w-full max-w-md">
         {/* Brand */}
         <div className="mb-8 flex flex-col items-center text-center">
-          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-500/30 bg-emerald-500/10 shadow-[0_0_50px_-10px_rgba(16,185,129,0.45)]">
-            <Gpu size={30} className="text-emerald-400" strokeWidth={1.8} />
+          <div className="mb-4">
+            <Logo size={56} withWordmark={false} />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-zinc-50">
             GPU<span className="text-emerald-400">Hub</span>
           </h1>
           <p className="mt-1.5 max-w-xs text-sm text-zinc-500">
-            Self-hosted orchestration for free-tier GPU compute providers
+            {L(lang, {
+              en: 'Self-hosted orchestration for free-tier GPU compute providers',
+              tr: 'Ücretsiz GPU sağlayıcıları için self-hosted orkestrasyon',
+            })}
           </p>
         </div>
 
@@ -121,7 +139,7 @@ export default function Login() {
           {needsSetup === null ? (
             <div className="flex h-44 flex-col items-center justify-center gap-3 text-sm text-zinc-500">
               <Loader2 className="animate-spin text-emerald-500" size={22} />
-              Checking instance status…
+              {L(lang, { en: 'Checking instance status…', tr: 'Sunucu durumu kontrol ediliyor…' })}
             </div>
           ) : (
             <>
@@ -135,12 +153,20 @@ export default function Login() {
                 </div>
                 <div>
                   <h2 className="text-sm font-semibold text-zinc-100">
-                    {isSetup ? 'Create admin account' : 'Sign in to GPUHub'}
+                    {isSetup
+                      ? L(lang, { en: 'Create admin account', tr: 'Admin hesabı oluştur' })
+                      : L(lang, { en: 'Sign in to GPUHub', tr: 'GPUHub’a giriş yap' })}
                   </h2>
                   <p className="text-xs text-zinc-500">
                     {isSetup
-                      ? 'First run — no admin exists yet. This account takes ownership.'
-                      : 'Use your GPUHub credentials to continue.'}
+                      ? L(lang, {
+                          en: 'First run — no admin exists yet. This account takes ownership.',
+                          tr: 'İlk çalıştırma — henüz admin yok. Bu hesap sahipliği alır.',
+                        })
+                      : L(lang, {
+                          en: 'Use your GPUHub credentials to continue.',
+                          tr: 'Devam etmek için GPUHub credential’ınızı kullanın.',
+                        })}
                   </p>
                 </div>
               </div>
@@ -151,9 +177,9 @@ export default function Login() {
                 </div>
               )}
 
-              <form onSubmit={onSubmit} className="space-y-4" noValidate={false}>
+              <form onSubmit={onSubmit} className="space-y-4">
                 <div>
-                  <Label htmlFor="username">Username</Label>
+                  <Label htmlFor="username">{L(lang, { en: 'Username', tr: 'Kullanıcı adı' })}</Label>
                   <Input
                     id="username"
                     autoComplete="username"
@@ -166,7 +192,7 @@ export default function Login() {
                 </div>
 
                 <div>
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password">{L(lang, { en: 'Password', tr: 'Şifre' })}</Label>
                   <div className="relative">
                     <Input
                       id="password"
@@ -191,7 +217,7 @@ export default function Login() {
 
                 {isSetup && (
                   <div>
-                    <Label htmlFor="confirm">Confirm password</Label>
+                    <Label htmlFor="confirm">{L(lang, { en: 'Confirm password', tr: 'Şifreyi tekrarla' })}</Label>
                     <Input
                       id="confirm"
                       type={showPassword ? 'text' : 'password'}
@@ -209,11 +235,11 @@ export default function Login() {
                 <Button type="submit" variant="primary" className="w-full" loading={submitting}>
                   {isSetup ? (
                     <>
-                      <UserPlus size={16} /> Create admin
+                      <UserPlus size={16} /> {L(lang, { en: 'Create admin', tr: 'Admin oluştur' })}
                     </>
                   ) : (
                     <>
-                      <LogIn size={16} /> Sign in
+                      <LogIn size={16} /> {L(lang, { en: 'Sign in', tr: 'Giriş yap' })}
                     </>
                   )}
                 </Button>
@@ -223,7 +249,10 @@ export default function Login() {
         </div>
 
         <p className="mt-6 text-center text-[11px] text-zinc-600">
-          GPUHub is self-hosted. Credentials never leave your infrastructure.
+          {L(lang, {
+            en: 'GPUHub is self-hosted. Credentials never leave your infrastructure.',
+            tr: 'GPUHub self-hosted’dır. Credential’larınız altyapınızdan asla çıkmaz.',
+          })}
         </p>
       </div>
     </div>

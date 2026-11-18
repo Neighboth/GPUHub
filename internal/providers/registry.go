@@ -47,4 +47,5 @@ var DefaultDisabled = map[string]bool{
 	"salad": true, "runpod": true, "codesphere": true, "replit": true,
 	"deepnote": true, "hex": true, "noteable": true, "domino": true,
 	"floydhub": true, "spell": true, "valohai": true,
+	"sagemaker-studio-lab": true, // closed to new customers since 2026-07
 }

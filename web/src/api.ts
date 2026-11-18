@@ -197,9 +197,9 @@ export interface Provider {
 }
 
 export interface AddingKeyBody {
-  label: string;
+  label?: string;
   credential: string;
-  bound_proxy_id?: string | null;
+  bound_proxy_id?: number | null;
   daily_quota?: number | null;
   weekly_quota?: number | null;
   priority?: number;
@@ -208,14 +208,19 @@ export interface AddingKeyBody {
 export interface ProxyItem {
   id: string;
   label: string;
-  url: string;
+  url?: string;
+  url_masked?: string;
   country?: string;
   health?: string;
   health_status?: string;
   status?: string;
   last_check_at?: string | null;
+  check_error?: string;
   bound_key?: { id?: string; label?: string; provider?: string; provider_name?: string } | null;
   bound_keys?: { id?: string; label?: string; provider?: string; provider_name?: string }[];
+  bound_key_id?: string | null;
+  bound_key_label?: string | null;
+  bound_provider_id?: string | null;
 }
 
 export type ProxyHealth = 'healthy' | 'unhealthy' | 'unknown';
@@ -283,8 +288,8 @@ export interface ApiKey {
   priority?: number;
   daily_quota?: number | null;
   weekly_quota?: number | null;
-  daily_used?: number | null;
-  weekly_used?: number | null;
+  usage_today?: number | null;
+  usage_week?: number | null;
   last_used_at?: string | null;
   error_count?: number | null;
   errors?: number | null;
@@ -452,9 +457,12 @@ export function disabledKeysSignal(res: unknown): number | null {
 /* Jobs                                                                        */
 /* -------------------------------------------------------------------------- */
 
-async function jobs(status?: string): Promise<Job[]> {
-  const q = status && status !== 'all' ? `?status=${encodeURIComponent(status)}` : '';
-  return unwrapList<Job>(await request(`/jobs${q}`), ['jobs', 'items', 'data']);
+async function jobs(status?: string, limit?: number): Promise<Job[]> {
+  const params = new URLSearchParams();
+  if (status && status !== 'all') params.set('status', status);
+  if (limit && limit > 0) params.set('limit', String(limit));
+  const q = params.toString();
+  return unwrapList<Job>(await request(`/jobs${q ? `?${q}` : ''}`), ['jobs', 'items', 'data']);
 }
 
 async function createJob(body: CreateJobBody): Promise<Job> {
@@ -498,9 +506,10 @@ async function testKey(id: string): Promise<unknown> {
 }
 
 async function reassignKeyProxy(id: string, proxyId: string): Promise<unknown> {
+  const pid = Number(proxyId);
   return request(`/keys/${encodeURIComponent(id)}/proxy`, {
     method: 'PATCH',
-    body: { proxy_id: proxyId },
+    body: { proxy_id: Number.isFinite(pid) ? pid : 0 },
   });
 }
 
@@ -528,6 +537,13 @@ async function rotateMasterKey(currentMasterKey: string, newMasterKey: string): 
   return request('/settings/rotate-master-key', {
     method: 'POST',
     body: { current_master_key: currentMasterKey, new_master_key: newMasterKey },
+  });
+}
+
+async function testWebhook(url?: string): Promise<unknown> {
+  return request('/settings/test-webhook', {
+    method: 'POST',
+    body: url ? { url } : {},
   });
 }
 
@@ -670,5 +686,6 @@ export const api = {
   settings,
   updateSettings,
   rotateMasterKey,
+  testWebhook,
   audit,
 };

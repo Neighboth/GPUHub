@@ -45,3 +45,45 @@ body {
     @apply px-4 py-3 align-middle text-sm text-zinc-300;
   }
 }
+
+/* ============ Light theme overrides (html.light) ============ */
+html.light { color-scheme: light; }
+html.light body { background: #eef1f5; color: #1f2430; }
+html.light .bg-zinc-950 { background-color: #eef1f5 !important; }
+html.light .bg-zinc-900 { background-color: #ffffff !important; }
+html.light .bg-zinc-900\/40 { background-color: #ffffff !important; }
+html.light .bg-zinc-900\/50 { background-color: #f4f6f9 !important; }
+html.light .bg-zinc-900\/60 { background-color: #ffffff !important; }
+html.light .bg-zinc-800 { background-color: #e4e8ee !important; }
+html.light .bg-zinc-800\/80 { background-color: #e4e8ee !important; }
+html.light .bg-zinc-800\/60 { background-color: #eceff4 !important; }
+html.light .border-zinc-800, html.light .border-zinc-800\/80, html.light .border-zinc-800\/60 { border-color: #d9dee6 !important; }
+html.light .border-zinc-700 { border-color: #c8ced8 !important; }
+html.light .border-zinc-900 { border-color: #e4e8ee !important; }
+html.light .text-zinc-50, html.light .text-zinc-100 { color: #12161f !important; }
+html.light .text-zinc-200 { color: #242b3a !important; }
+html.light .text-zinc-300 { color: #2f3a4f !important; }
+html.light .text-zinc-400 { color: #47506a !important; }
+html.light .text-zinc-500 { color: #5b6680 !important; }
+html.light .text-zinc-600 { color: #6e7a93 !important; }
+html.light .text-zinc-700 { color: #8b96ac !important; }
+html.light .text-emerald-400 { color: #059669 !important; }
+html.light .text-emerald-300 { color: #047857 !important; }
+html.light .bg-emerald-500 { background-color: #10b981 !important; }
+html.light .bg-emerald-500\/10 { background-color: #d3f7e8 !important; }
+html.light .bg-emerald-500\/15 { background-color: #c9f3de !important; }
+html.light .border-emerald-500\/30 { border-color: #6ee7b7 !important; }
+html.light .border-emerald-500\/25 { border-color: #86efb4 !important; }
+html.light .border-emerald-500\/20 { border-color: #a7f3d0 !important; }
+html.light .text-cyan-400, html.light .text-teal-400 { color: #0e7490 !important; }
+html.light .input-base { background: #ffffff; color: #1f2430; border-color: #d9dee6; }
+html.light .input-base::placeholder { color: #8b96ac; }
+html.light .card-surface { background: #ffffff; border-color: #e0e4ea; box-shadow: 0 1px 2px rgba(16,24,40,.06); }
+html.light .td-base { color: #2f3a4f; }
+html.light .th-base { color: #5b6680; }
+html.light .label-base { color: #47506a; }
+html.light .text-red-400, html.light .text-red-300 { color: #dc2626 !important; }
+html.light .text-amber-300, html.light .text-amber-400 { color: #b45309 !important; }
+html.light .text-emerald-500 { color: #059669 !important; }
+html.light ::-webkit-scrollbar-thumb { background: #c8ced8; }
+html.light .logo-wordmark { color: #12161f !important; }

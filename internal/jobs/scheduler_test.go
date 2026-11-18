@@ -146,7 +146,7 @@ func TestFailover_ModalUnsupportedToPaperspace(t *testing.T) {
 	modalKey := insertKey(t, conn, "modal", "modal-primary", `{"token":"m"}`, px1, box, 10)
 	paperKey := insertKey(t, conn, "paperspace", "paperspace-primary", `{"token":"p"}`, px2, box, 10)
 
-	jobID := insertJob(t, conn, "any", 16, 1, []string{"modal", "paperspace"})
+	jobID := insertJob(t, conn, "any", 8, 1, []string{"modal", "paperspace"})
 
 	s := New(conn, cfg, box, nil)
 	if err := s.scheduleOne(context.Background(), jobID); err != nil {
@@ -213,7 +213,7 @@ func TestFailover_429QuotaToNextProvider(t *testing.T) {
 	psKey := insertKey(t, conn, "paperspace", "ps", `{"token":"p"}`, px1, box, 10)
 	saturnKey := insertKey(t, conn, "saturn", "sat", `{"token":"s"}`, px2, box, 20)
 
-	jobID := insertJob(t, conn, "any", 16, 1, []string{"paperspace", "saturn"})
+	jobID := insertJob(t, conn, "any", 8, 1, []string{"paperspace", "saturn"})
 	s := New(conn, cfg, box, nil)
 	if err := s.scheduleOne(context.Background(), jobID); err != nil {
 		t.Fatal(err)
@@ -268,7 +268,7 @@ func TestDisabledProviderIsRejected(t *testing.T) {
 	px1 := insertProxy(t, conn, "proxy-us-1", "http://127.0.0.1:1", box)
 	_ = insertKey(t, conn, "paperspace", "ps", `{"token":"p"}`, px1, box, 10)
 
-	jobID := insertJob(t, conn, "any", 16, 1, []string{"paperspace"})
+	jobID := insertJob(t, conn, "any", 8, 1, []string{"paperspace"})
 	s := New(conn, cfg, box, nil)
 	if err := s.scheduleOne(context.Background(), jobID); err != nil {
 		t.Fatal(err)
@@ -293,7 +293,7 @@ func TestPollOne_FailureTriggersFailover(t *testing.T) {
 	insertProvider(t, conn, "paperspace", true)
 	px1 := insertProxy(t, conn, "proxy-us-1", "http://127.0.0.1:1", box)
 	_ = insertKey(t, conn, "paperspace", "ps", `{"token":"p"}`, px1, box, 10)
-	jobID := insertJob(t, conn, "any", 16, 1, []string{"paperspace"})
+	jobID := insertJob(t, conn, "any", 8, 1, []string{"paperspace"})
 	_, _ = conn.ExecContext(context.Background(), `UPDATE jobs SET status='running', provider_id='paperspace', key_id=(SELECT id FROM provider_keys WHERE label='ps'), remote_id='ps-remote-x', started_at=CURRENT_TIMESTAMP`)
 
 	s := New(conn, cfg, box, nil)

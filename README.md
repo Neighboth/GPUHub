@@ -79,29 +79,34 @@ Every job carries mandatory GPU requirements (API and UI both enforce):
 {
   "type": "script|notebook|docker|command",
   "payload": "...",
-  "gpu_type": "T4",          // or P100 V100 A100 H100 L4 L40S RTX4090 RTX6000Ada MI300X Gaudi2 any
-  "min_vram_gb": 16,         // integer GB; 1..80+
-  "gpu_count": 1             // 1..8
+  "gpu_type": "A100",                     // or T4 P100 V100 A10 A100 H100 H200 L4 L40S RTX4090 RTX6000Ada RTX6000Pro B200 B300 MI300X Gaudi2 M4000 P4000 any
+  "gpu_type_fallback": ["H100", "L40S", "T4"],   // OPTIONAL ordered fallback chain — tried in order when gpu_type is unavailable
+  "min_vram_gb": 16,                      // integer GB; required (≥1)
+  "gpu_count": 1,                         // 1..8
+  "session_renew": false                  // true → scheduler re-queues on unexpected death; payload sees GPUHUB_ATTEMPT/GPUHUB_RESUME envs
 }
 ```
 
-Canonical VRAM table (`internal/providers/gputable.go`): T4=16, P100=16, V100=32, A100=80, H100=80, L4=24, L40S=48, RTX4090=24, RTX6000Ada=48, MI300X=192, Gaudi2=96.
+Canonical VRAM table (`internal/providers/gputable.go`, updated 2026-11 research pass):
+T4=16, P100=16, V100=32, A10/A10G=24, A100(80GB variant canonical)=80, H100=80, H200=141, L4=24, L40S=48, RTX4090=24, RTX6000Ada=48, RTX6000Pro=96, M4000=8, P4000=8, MI300X=192, B200=180, B300=288, Gaudi2=96.
 
 Scheduler filter per provider:
-1. `gpu_type != "any"` → provider must offer that exact canonical type.
+1. `gpu_type != "any"` → provider must offer that exact canonical type; `gpu_type_fallback` entries are tried left→right in order when the primary type has no match.
 2. Any offering GPU must have `vram_gb >= min_vram_gb`.
 3. `gpu_count <= max_count` of the offering.
-4. The lowest-VRAM fitting GPU wins (least waste).
-5. Provider must be enabled AND have ≥1 eligible key (active, proxy bound, not in cooldown, not over local daily/weekly quota).
+4. The lowest-VRAM fitting GPU of the highest-priority requested type wins (least waste).
+5. Provider must be enabled AND have ≥1 eligible key (active, not in cooldown, not over local daily/weekly quota — proxy binding is now OPTIONAL, see below).
 6. `provider_preference: ["modal"]` restricts candidates to the listed ids.
 7. Provider-side quota ≥ 90% watermark (`GPUHUB_QUOTA_HIGH_WATERMARK`) → key skipped.
-8. If nothing fits → job marked **`unschedulable`** and the UI shows *why* per provider (e.g. `"GPU T4 has 16GB VRAM < required 40GB"`, `"provider disabled"`, `"no eligible key…"`).
+8. If nothing fits → job marked **`unschedulable`** and the UI shows *why* per provider.
 
-"any" selects the most suitable offering by quota headroom + priority (see rotation strategies).
+`any` selects the most suitable offering by quota headroom + priority.
+
+**VRAM-only jobs**: set `gpu_type: "any"` and `min_vram_gb: N` — the scheduler picks any GPU with ≥N GB. Combine with `provider_preference` to constrain where. **GPU chains**: `gpu_type_fallback` gives ordered fallbacks *within one request* — e.g. `"gpu_type": "A100", "gpu_type_fallback": ["H100", "L40S"]` runs on A100 if offered, else H100, else L40S — useful when free tiers bounce availability.
 
 ## Multi-key rotation
 
-Each provider accepts N keys. Every key has: `label`, `credential` (AES-256-GCM encrypted), `bound_proxy_id` (**mandatory, 1:1**), `daily_quota` / `weekly_quota` (local accounting via `key_usage`, auto-reset per day/ISO-week), `priority` (lower = preferred), `weight` (for weighted rotation), `active`, `cooldown_until`, `error_count`, `consecutive_errors`.
+Each provider accepts N keys. Every key has: `label`, `credential` (AES-256-GCM encrypted), `bound_proxy_id` (**now OPTIONAL** — omit for direct egress; 1:1 binding when present), `daily_quota` / `weekly_quota` (local accounting via `key_usage`, auto-reset per day/ISO-week), `priority` (lower = preferred), `weight` (for weighted rotation), `active`, `cooldown_until`, `error_count`, `consecutive_errors`.
 
 Key rotation (never proxies) strategies, chosen in Settings (`rotation_strategy` / `scheduler_strategy`):
 
@@ -115,6 +120,8 @@ Failure handling: on submit error (429/5xx/network) the key gets `consecutive_er
 ## STICKY PROXY binding
 
 **Rule: a proxy, once bound to a key, stays bound — forever — until (a) an admin manually reassigns it, or (b) the proxy is deleted or fails health checks. GPUHub never rotates proxies and never auto-rebinds keys.**
+
+> **Binding is optional since 2026-11.** A key with no proxy uses direct egress (no pinning, no sticky transport — but also no proxy protection). The 1:1 sticky rules below apply only to keys WITH a proxy bound. Proxy deletion behaves as before: bound keys become proxy-less, disabled, and are NEVER auto-rebound. Admins can unbind via `PATCH /api/v1/keys/{key_id}/proxy` with `{"proxy_id": 0}` — the key stays active on direct egress.
 
 ```
 ┌───────────┐        1:1 (UNIQUE index on bound_proxy_id WHERE NOT NULL)
@@ -172,22 +179,22 @@ States: `queued → scheduling → running → succeeded | failed | cancelled | 
 
 32 adapters are registered (`internal/providers/registry.go`). **Only providers with a real free tier offering COMPUTE GPUs are enabled by default.** Everything marked "disabled" is seeded but off; flip it in Providers → toggle. Verified notes per provider (public docs/marketing pages as of Nov 2026 — free-tier terms change frequently; **verify before relying on them**):
 
-| # | Provider | Free GPU tier (as advertised) | API class | Status |
+| # | Provider | Free GPU tier (as advertised, verified 2026-11) | API class | Status |
 |---|---|---|---|---|
-| 1 | Kaggle Notebooks | 30 GPU-h/week, T4 or P100 | Identity REST only; no public job-submit API (NOTE) | enabled* |
-| 2 | Google Colab | free T4, ~12h sessions | none official; unofficial runtime protocol (NOTE) | enabled* |
-| 3 | Lightning AI | monthly free credits, T4/L4/A100 class | Bearer REST (Studios) | enabled |
-| 4 | Paperspace Gradient | free GPU notebooks (T4/P100/V100, plan-dependent) | REST `/jobs` (x-api-key) | enabled |
-| 5 | Saturn Cloud | 30 GPU-h/mo, 1×T4 | Bearer REST | enabled |
-| 6 | SageMaker Studio Lab | 4 GPU-h/session T4/G4dn | none (UI-only) (NOTE) | enabled* |
-| 7 | Paddle AI Studio (Baidu) | V100-class activations, daily limits | Bearer REST (`/user/info`); submit UI-only (NOTE) | enabled* |
-| 8 | ModelScope (Alibaba) | 16–24h free GPU notebooks | SDK-token; REST for identity only (NOTE) | enabled* |
-| 9 | Tencent CloudStudio | region-dependent GPU labs | token REST (NOTE) | enabled* |
+| 1 | Kaggle Notebooks | ~30 GPU-h/week; **T4 x2 only** (16GB each — P100 retired 2026-09); 12h sessions; phone-verified | Identity REST only; no public job-submit API (NOTE) | enabled* |
+| 2 | Google Colab | free T4, ~12h sessions, dynamic limits | none official; unofficial runtime protocol (NOTE) | enabled* |
+| 3 | Lightning AI | ~15 free credits/month (≈75 T4 GPU-h); T4/L4/L40S/A100/H200 by account | Bearer REST (Studios) | enabled |
+| 4 | Paperspace Gradient | Free plan: **M4000 8GB** notebook GPU only (Maxwell) + C4 CPU; 6h auto-shutdown; Pro $8/mo adds P4000/RTX4000/A4000, Growth $39/mo adds A100-80G | REST (x-api-key); legacy API | enabled |
+| 5 | Saturn Cloud | **150 GPU+CPU hours/month** (shared, T4 16GB only); JupyterLab/SSH/Dask; auto-shutdown when idle | Bearer REST | enabled |
+| 6 | SageMaker Studio Lab | **CLOSED to new customers since 2026-07** — replaced by SageMaker Free Tier (250 CPU-h/mo); T4 sessions for legacy accounts | none (UI-only) | disabled — NOTE |
+| 7 | Paddle AI Studio (Baidu) | V100 16GB activations, ~12h/day cap; Baidu phone account | Bearer REST (`/user/info`); submit UI-only (NOTE) | enabled* |
+| 8 | ModelScope (Alibaba) | 36h one-time NVIDIA A10 24GB (10h/run) + **100h AMD MI300X 192GB** via AMD Developer Program (ROCm) | SDK-token; REST for identity only (NOTE) | enabled* |
+| 9 | Tencent CloudStudio | ~10000 free GPU-minutes/month (T4 16GB, region-dependent); real-name account | token REST (NOTE) | enabled* |
 | 10 | Leafcloud | free research-credit GPU program (T4/L4) | Bearer REST `/instances` | enabled |
-| 11 | Hugging Face Spaces (ZeroGPU) | shared H100 seconds/day | Bearer REST `/whoami-v2`; ZeroGPU attach is code-level (NOTE) | enabled* |
-| 12 | Modal | $30/mo free compute credits (T4…H100) | token auth; **no public REST submit** — use `modal run` SDK (NOTE) | enabled* |
-| 13 | Beam | free monthly allowance, T4/L4 | Bearer REST `/containers` (inferred) | enabled |
-| 14 | Intel Tiber AI Cloud | free Gaudi2 developer program | Bearer REST; OpenShift notebooks (NOTE) | enabled* |
+| 11 | Hugging Face Spaces (ZeroGPU) | shared **NVIDIA RTX PRO 6000 Blackwell**, free 5 GPU-min/day (~3 runs); large=48GB (1×quota) / xlarge=96GB (2×quota); 24h reset; Gradio only, 60s/call | Bearer REST `/whoami-v2`; ZeroGPU attach is code-level (NOTE) | enabled* |
+| 12 | Modal | **$30/mo Starter compute credits**; 11 GPU SKUs: T4 16G, L4 24G, A10 24G, L40S 48G, A100 40/80G, RTX PRO 6000 96G, H100 80G, H200 141G, B200 180G, B300 288G | token auth; **no public REST submit** — use `modal run` SDK (NOTE) | enabled* |
+| 13 | Beam | free monthly container allowance, T4/L4 | Bearer REST `/containers` (inferred) | enabled |
+| 14 | Intel Tiber AI Cloud | free Gaudi2 96GB developer program | Bearer REST; OpenShift notebooks (NOTE) | enabled* |
 | 15 | Genesis Cloud | **trial credit only, no permanent free GPU** | REST | disabled — NOTE |
 | 16 | Anyscale | trial credits only (free tier ended) | REST | disabled — NOTE |
 | 17 | JarvisLabs | free notebook credits (new accounts) | Bearer REST (inferred) | enabled |
@@ -206,6 +213,7 @@ States: `queued → scheduling → running → succeeded | failed | cancelled | 
 | 30 | Valohai | 10 free compute-hours trial project | Bearer REST | disabled — NOTE |
 | 31 | Determined AI | OSS, free on your own GPUs | Bearer REST | enabled (self-host) |
 | 32 | ClearML | free hosted orchestration; GPUs must come from your agents | HTTP basic (access/secret) | enabled (self-host GPU) |
+| **33** | **Self-hosted Runner** | **your own machine anywhere** — Kaggle/Colab cell, Modal deploy, own RTX box | Deploy `examples/runner.py` (HTTP + Bearer token) | **enabled** |
 
 `enabled*` = provider is usable for quota/scheduling bookkeeping and key management, but **submit** runs through the provider's own UI/SDK (NOTE) — GPUHub will mark attempts failed with an explicit "submission via API not supported; see README NOTE" and fail over to the next candidate.
 
@@ -218,11 +226,32 @@ func init() { registerBuiltin(func() []Provider { return []Provider{NewMyProvide
 // + add row to DefaultDisabled if unsure; + README line; + registry test covers it automatically.
 ```
 
+## Self-hosted Runner — any provider's GPU becomes usable via API (including Kaggle/Colab cells!)
+
+GPUHub ships a **generic runner** (`examples/runner.py`, ~250 lines, **stdlib-only Python**) that bridges GPUHub and ANY environment where you can execute code:
+
+1. Run it inside a Kaggle/Colab cell, a Modal container, a Lightning studio, your home RTX box or a VPS:
+   ```bash
+   # in a notebook cell (or on your own machine):
+   !pip install fastapi 2>&1 | tail -1
+   import getpass, os
+   os.environ["GPUHUB_RUNNER_TOKEN"] = getpass.getpass("runner token: ")
+   !python examples/runner.py --host 0.0.0.0 --port 8787 &     # or paste the file inline
+   # expose it:
+   !pip install pyngrok && from pyngrok import ngrok; print(ngrok.connect(8787))
+   ```
+2. Paste the public URL into **Providers → Self-hosted Runner → Add key** with credential `{"base_url":"https://xxxx.ngrok.io","token":"<your token>"}`. GPU binding = sticky (optional); unbound = direct.
+3. GPUHub schedules work to it like any provider: `gpu_type`, fallback chain, quotas, logs, cancel — all work.
+
+**~9h session wall:** Free providers kill sessions (Kaggle ~12h, Colab ~12h, Studio Lab 4h). GPUHub can't change a provider's limit — but it makes it survivable: set `session_renew: true`, and when the session dies unexpectedly the job is automatically re-queued on the next eligible key; the payload sees `GPUHUB_ATTEMPT=<n>` and `GPUHUB_RESUME=1` — write your trainer to load `checkpoint.pt` when `RESUME=1` (the shipped `examples/runner.py` passes these through; a torch trainer with ~10 lines of save/load logic survives multi-session runs). Kaggle's 30 GPU-hours/week still caps total work — renewal ≠ quota bypass.
+
+**Runner protocol (for anything calling GPUHub):** `GET /health`, `POST /jobs`, `GET /jobs/{id}`, `GET /jobs/{id}/logs`, `POST /jobs/{id}/cancel`, auth `Bearer <token>`. The protocol is deliberately trivial — any language can implement it.
+
 ## REST API
 
 Base URL `/api/v1`. Mutating calls require `X-Requested-With: XMLHttpRequest` (CSRF) + `Authorization: Bearer <jwt>`. WebSocket logs accept `?token=` for browser convenience. Full spec: **`docs/openapi.yaml`**, Swagger UI at **`/docs`**.
 
-Job submit example (the two required GPU fields in bold by convention):
+Job submit example (see also `examples/submit_job.py` for GPU fallback chains, VRAM-only requests and session renew):
 
 ```bash
 curl -sS -X POST http://localhost:8080/api/v1/jobs \
@@ -231,18 +260,20 @@ curl -sS -X POST http://localhost:8080/api/v1/jobs \
   -d '{
         "type": "script",
         "payload": "import torch;print(torch.cuda.get_device_name(0))",
-        "gpu_type": "T4",
+        "gpu_type": "A100",
+        "gpu_type_fallback": ["H100", "L40S", "T4"],
         "min_vram_gb": 16,
         "gpu_count": 1,
         "max_duration_seconds": 3600,
-        "provider_preference": ["kaggle", "paperspace"]
+        "provider_preference": ["modal", "saturn", "runner"],
+        "session_renew": false
       }'
 # → {"id": 42, "status": "queued"}
 ```
 
-If `gpu_type`, `min_vram_gb` (≥1) or `gpu_count` (1–8) are missing/invalid → `400` with a precise message.
+If `gpu_type`, `min_vram_gb` (≥1) or `gpu_count` (1–8) are missing/invalid → `400` with a precise message. Every GPU field is mandatory; fallback chain and provider preference are optional.
 
-Endpoints (selection; see openapi.yaml): `POST /auth/login` · `GET /providers` · `POST /providers/{id}/keys` · `PATCH /keys/{key_id}/proxy` · `GET /providers/{id}/quota` · `POST /providers/{id}/test` · `GET|POST|DELETE /proxies[/{id}]` · `POST /jobs` · `GET /jobs` · `GET /jobs/{id}` · `GET /jobs/{id}/logs` (WS) · `POST /jobs/{id}/cancel` · `GET /dashboard/summary` · `GET /audit` · `GET|PATCH /settings` · `POST /settings/rotate-master-key`.
+Endpoints (selection; see openapi.yaml): `POST /auth/login` · `GET /providers` · `POST /providers/{id}/keys` · `PATCH /keys/{key_id}/proxy` · `GET /providers/{id}/quota` · `POST /providers/{id}/test` · `GET|POST|DELETE /proxies[/{id}]` · `POST /jobs` · `GET /jobs` · `GET /jobs/{id}` · `GET /jobs/{id}/logs` (WS) · `POST /jobs/{id}/cancel` · `GET /dashboard/summary` · `GET /audit` · `GET|PATCH /settings` · `POST /settings/test-webhook` · `POST /settings/rotate-master-key`.
 
 ## Security
 
@@ -257,9 +288,9 @@ Endpoints (selection; see openapi.yaml): `POST /auth/login` · `GET /providers` 
 
 ## Configuration
 
-`.env` (or env) beats `config.yaml`. Keys: `GPUHUB_PORT`, `GPUHUB_DB_PATH`, `GPUHUB_MASTER_KEY` (**required**), `GPUHUB_JWT_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD` (first-boot only), `GPUHUB_SCHEDULER_STRATEGY`, `GPUHUB_ROTATION_STRATEGY` (`round_robin|least_used|most_quota|weighted`), `GPUHUB_MAX_RETRIES`, `GPUHUB_QUOTA_HIGH_WATERMARK`, `GPUHUB_PROXY_HEALTH_URL`, `GPUHUB_NOTIFY_WEBHOOK_URL`, `GPUHUB_DEV=1` (ephemeral insecure key, dev only).
+`.env` (or env) beats `config.yaml`. Keys: `GPUHUB_PORT`, `GPUHUB_DB_PATH`, `GPUHUB_MASTER_KEY` (**required**), `GPUHUB_JWT_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD` (first-boot only), `GPUHUB_SCHEDULER_STRATEGY`, `GPUHUB_ROTATION_STRATEGY` (`round_robin|least_used|most_quota|weighted`), `GPUHUB_MAX_RETRIES`, `GPUHUB_QUOTA_HIGH_WATERMARK`, `GPUHUB_PROXY_HEALTH_URL`, `GPUHUB_NOTIFY_WEBHOOK_URL` (for Slack/generic: plain JSON POST; **for discord.com webhooks: automatic colored embed** with username "GPUHub"; `POST /settings/test-webhook` sends a test ping), `GPUHUB_DEV=1` (ephemeral insecure key, dev only).
 
-Migrations (embedded, applied at boot, idempotent): `internal/db/migrations/0001_init.sql` tracked in `schema_migrations`. Apply manually: `go run ./cmd/gpuhub --migrate-only` (or `make migrate`).
+Migrations (embedded, applied at boot, idempotent): `internal/db/migrations/` — 0001 initial schema, 0002 `jobs.gpu_fallback`, 0003 `jobs.session_renew`, tracked in `schema_migrations`. Apply manually: `go run ./cmd/gpuhub --migrate-only` (or `make migrate`).
 
 ## Tests
 
@@ -270,6 +301,7 @@ Migrations (embedded, applied at boot, idempotent): `internal/db/migrations/0001
 - Sticky proxy: 100× cached transport = same proxy; no rebind without manual SQL; `HealthCheckAll` deactivates keys without rebinding; delete-proxy simulation disables keys; proxy URL validation + redaction
 - Adapters vs `httptest` mocks: auth header, submit ID parsing, state normalization, 429 mapping, logs, quota shaping, mixed registry sanity (≥32, unique ids, known GPUs)
 - API integration: CSRF header enforcement, login, 1:1 proxy constraint (409), delete-proxy flow → key disabled & unbound, job GPU-field validation, dashboard/audit endpoints
+- Notify: Discord webhook detection → colored embed payload, plain-JSON fallback for other URLs, webhook 5xx → error
 
 Run: `make test` · smoke: `./scripts/smoke.sh` · compose: `make up` · logs: `make logs`.
 
@@ -281,13 +313,15 @@ For bare metal: `cd web && npm ci && npm run build && cd .. && go build -o bin/g
 
 ## Known limitations & roadmap
 
-- Free-tier terms change often; several adapters (Kaggle/Colab/Studio Lab/ModelScope/Modal/ZeroGPU) **have no public job-submit HTTP API** — GPUHub schedules and enforces quota/failover honestly, but actual run submission for those providers uses their UI/SDK (attempts are marked failed-by-design with explicit messages, and other candidates are tried). Provider APIs that do exist are called for real.
-- Provider QUOTA endpoints: many providers don't expose remaining free quota; GPUHub meters local usage (`key_usage`, per-day/week counters) and only consumes provider-reported quota when available (e.g. `/usage` shapes behind each adapter's `quota` path; see per-adapter code comments with NOTE markers).
+- Free-tier terms change often; several adapters (Kaggle/Colab/Studio Lab/ModelScope/Modal/ZeroGPU) **have no public job-submit HTTP API** — GPUHub schedules and enforces quota/failover honestly, but actual run submission for those providers goes through our **Self-hosted Runner** (deploy `examples/runner.py` inside the environment and GPUHub drives it over HTTP) or the provider's own UI/SDK (attempts are marked failed-by-design with explicit messages, and other candidates are tried).
+- Provider QUOTA endpoints: many providers don't expose remaining free quota; GPUHub meters local usage (`key_usage`, per-day/week counters) and only consumes provider-reported quota when available.
 - Live log streaming is poll-based over WebSocket (no provider websockets), 1s cadence; logs are also persisted on the job row.
-- SQLite WAL + `busy_timeout(5000)`; single-writer workload fits free-tier GPU concurrency easily. If you outgrow it, mirror the `internal/db` layer onto Postgres (see roadmap) — interfaces are tiny.
-- Notifications are fire-and-forget webhooks; no email templating yet.
-- Roadmap: per-provider usage webhooks, Postgres option, per-key spend forecasts, `unschedulable` wait-notify, SOCKS5 health probe concurrency limits, OIDC/SSO, per-provider submit SDKs for Modal/Kaggle/Colab where they exist, Helm chart.
+- The ~9–12h session wall of free providers (Kaggle ~12h, Colab ~12h, Studio Lab 4h) cannot be removed — `session_renew` + checkpoint/resume makes long runs survive, it does not extend quotas.
+- SQLite WAL + `busy_timeout(5000)`; single-writer workload fits free-tier GPU concurrency easily.
+- Notifications: Discord auto-detects colored embeds; generic/Slack get plain JSON. Email templating not implemented.
+- UI: English + Turkish (top-right switcher); light + dark themes (top bar toggle). Jobs are created via code/API (the UI no longer has a job creation form — monitoring lives on the Dashboard).
+- Roadmap: Postgres option, per-key spend forecasts, `unschedulable` wait-notify, multi-runner load balancing for the Runner provider, Helm chart.
 
-## CI (GitHub Actions � GHCR)
+## CI (GitHub Actions � GHCR)
 
-`.github/workflows/ghcr.yml` pushes `ghcr.io/neighboth/gpuhub:latest` (and `sha-<short>`) to GitHub Container Registry on every push to `main`. Private package by default; make it public in repo � Packages � package settings, or keep private and `docker login ghcr.io -u <user> -p <read:packages PAT>` on the target host. CasaOS deploy: see `deploy/casaos/docker-compose.yml`.
+`.github/workflows/ghcr.yml` pushes `ghcr.io/neighboth/gpuhub:latest` (and `sha-<short>`) to GitHub Container Registry on every push to `main`. Private package by default; make it public in repo � Packages � package settings, or keep private and `docker login ghcr.io -u <user> -p <read:packages PAT>` on the target host. CasaOS deploy: see `deploy/casaos/docker-compose.yml`.

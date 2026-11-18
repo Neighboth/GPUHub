@@ -20,7 +20,8 @@ var (
 	capT4A100       = []GPU{gpu("T4", 16, 1), gpu("A100", 40, 1)}
 	capV100         = []GPU{gpu("V100", 16, 1)}
 	capL4           = []GPU{gpu("L4", 24, 1)}
-	capAnyFreeSmall = []GPU{gpu("T4", 16, 1), gpu("P100", 16, 1), gpu("V100", 16, 1), gpu("L4", 24, 1)}
+	capAnyFreeSmall = []GPU{gpu("T4", 16, 8), gpu("P100", 16, 8), gpu("V100", 16, 8), gpu("L4", 24, 8)}
+	capSelfHost     = []GPU{gpu("T4", 16, 8), gpu("P100", 16, 8), gpu("V100", 16, 8), gpu("L4", 24, 8), gpu("A100", 80, 8), gpu("H100", 80, 8), gpu("RTX4090", 24, 8), gpu("RTX6000Pro", 96, 8)}
 )
 
 // --- 1. Kaggle Notebooks ---
@@ -30,9 +31,9 @@ var (
 func NewKaggle() *apiAdapter {
 	return &apiAdapter{
 		id: "kaggle", name: "Kaggle Notebooks", baseURL: "https://www.kaggle.com/api/v1",
-		caps: Capabilities{GPUs: []GPU{gpu("P100", 16, 1), gpu("T4", 16, 1)}, MaxDurationHours: 12,
+		caps: Capabilities{GPUs: []GPU{gpu("T4", 16, 2)}, MaxDurationHours: 12,
 			Frameworks: []string{"pytorch", "tensorflow", "jax"}, Notebooks: true, Docker: false, SSH: false,
-			FreeTierNotes: "30 GPU-hours/week; P100 (16GB) or 2xT4; phone-verified accounts"},
+			FreeTierNotes: "30 GPU-hours/week (floating; T4 x2 16GB — only GPU, P100 retired 2026-09); phone-verified; 12h max session; /kaggle/working persists 20GB"},
 		auth:     basicAuth,
 		validate: "/competitions/list?page=1",
 		quota:    "", // not exposed — tracked locally by GPUHub (key_usage)
@@ -59,9 +60,9 @@ func NewColab() *apiAdapter {
 func NewLightning() *apiAdapter {
 	return &apiAdapter{
 		id: "lightning", name: "Lightning AI", baseURL: "https://lightning.ai/api/v1",
-		caps: Capabilities{GPUs: []GPU{gpu("T4", 16, 1), gpu("L4", 24, 1), gpu("A100", 40, 1)}, MaxDurationHours: 10,
+		caps: Capabilities{GPUs: []GPU{gpu("T4", 16, 1), gpu("L4", 24, 1), gpu("L40S", 48, 1), gpu("A100", 40, 1), gpu("H200", 141, 1)}, MaxDurationHours: 4,
 			Frameworks: []string{"pytorch", "tensorflow", "jax"}, Notebooks: true, Docker: true, SSH: true,
-			FreeTierNotes: "Free monthly GPU credits (T4/A10G class) on CPU/GPU dev machines"},
+			FreeTierNotes: "Free credits every month (~75 T4 GPU-hours, 15 credits); T4→A100/H200 quota by account; 1 free Studio, restarts ~4h; card needed for more credits"},
 		auth:     bearer,
 		validate: "/users/me",
 		submit:   "/studios", // NOTE: unofficial; actual run orchestration is Studio-based (SSH into dev machine)
@@ -73,9 +74,9 @@ func NewLightning() *apiAdapter {
 func NewPaperspace() *apiAdapter {
 	return &apiAdapter{
 		id: "paperspace", name: "Paperspace Gradient", baseURL: "https://api.paperspace.com",
-		caps: Capabilities{GPUs: []GPU{gpu("T4", 16, 1), gpu("P100", 16, 1), gpu("V100", 16, 1)}, MaxDurationHours: 12,
-			Frameworks: []string{"pytorch", "tensorflow"}, Notebooks: true, Docker: true, SSH: true,
-			FreeTierNotes: "Free GPU (M4000/P4000/T4, plan-dependent) for notebooks, 6h sessions"},
+		caps: Capabilities{GPUs: []GPU{gpu("M4000", 8, 1)}, MaxDurationHours: 6,
+			Frameworks: []string{"pytorch", "tensorflow"}, Notebooks: true, Docker: true, SSH: false,
+			FreeTierNotes: "Free plan: 1 free GPU (M4000, 8GB — Maxwell, slow) + free CPU (C4); 6h auto-shutdown; private workspaces, notebooks only; Pro $8/mo adds P4000/RTX4000/A4000 free GPU types"},
 		auth:     tokenHeader("x-api-key"),
 		validate: "/users/me",
 		submit:   "/jobs",
@@ -90,9 +91,9 @@ func NewPaperspace() *apiAdapter {
 func NewSaturn() *apiAdapter {
 	return &apiAdapter{
 		id: "saturn", name: "Saturn Cloud", baseURL: "https://api.saturncloud.io/api/v1",
-		caps: Capabilities{GPUs: capT4, MaxDurationHours: 4,
-			Frameworks: []string{"pytorch", "tensorflow"}, Notebooks: true, Docker: true, SSH: true,
-			FreeTierNotes: "Free plan: 30 GPU-hours/month, 1x NVIDIA T4 instances"},
+		caps: Capabilities{GPUs: []GPU{gpu("T4", 16, 1)}, MaxDurationHours: 4,
+			Frameworks: []string{"pytorch", "tensorflow", "dask"}, Notebooks: true, Docker: true, SSH: true,
+			FreeTierNotes: "Hosted Free: 150 shared GPU+CPU hours/month (T4 16GB only); JupyterLab/RStudio/SSH/Dask; no card; idle auto-shutdown"},
 		auth:     bearer,
 		validate: "/users/me/",
 		submit:   "/jupyter-servers/",
@@ -109,7 +110,7 @@ func NewSageMakerStudioLab() *apiAdapter {
 		id: "sagemaker-studio-lab", name: "SageMaker Studio Lab", baseURL: "https://studiolab.sagemaker.aws.amazon.com",
 		caps: Capabilities{GPUs: capT4, MaxDurationHours: 4,
 			Frameworks: []string{"pytorch", "tensorflow"}, Notebooks: true, Docker: false, SSH: false,
-			FreeTierNotes: "Free 4h GPU sessions (T4/G4dn), 15GB RAM, no credit card"},
+			FreeTierNotes: "CLOSED to new customers since 2026-07 (AWS migrated Studio Lab to SageMaker Studio free tier, 250 CPU-h/mo); existing accounts still work 4h GPU sessions (T4)"},
 		auth:     tokenHeader("Cookie"),
 		validate: "", submit: "",
 	}
@@ -121,9 +122,9 @@ func NewSageMakerStudioLab() *apiAdapter {
 func NewPaddleAIStudio() *apiAdapter {
 	return &apiAdapter{
 		id: "paddle-aistudio", name: "Paddle AI Studio", baseURL: "https://aistudio.baidu.com/api",
-		caps: Capabilities{GPUs: []GPU{gpu("V100", 32, 1), gpu("P100", 16, 1)}, MaxDurationHours: 12,
+		caps: Capabilities{GPUs: []GPU{gpu("V100", 16, 1)}, MaxDurationHours: 12,
 			Frameworks: []string{"paddlepaddle", "pytorch"}, Notebooks: true, Docker: false, SSH: false,
-			FreeTierNotes: "Free GPU activations (V100-class) with daily limits; Baidu account + phone required"},
+			FreeTierNotes: "Free V100 16GB activations; daily 12h session cap; China account (phone); PaddlePaddle-first ecosystem"},
 		auth:     tokenHeader("Authorization"),
 		validate: "/v1/user/info", submit: "", // NOTE: no public job API; submission via web UI
 	}
@@ -135,9 +136,9 @@ func NewPaddleAIStudio() *apiAdapter {
 func NewModelScope() *apiAdapter {
 	return &apiAdapter{
 		id: "modelscope", name: "ModelScope", baseURL: "https://modelscope.cn/api/v1",
-		caps: Capabilities{GPUs: []GPU{gpu("T4", 16, 1), gpu("L4", 24, 1)}, MaxDurationHours: 24,
+		caps: Capabilities{GPUs: []GPU{gpu("A10", 24, 1), gpu("MI300X", 192, 1)}, MaxDurationHours: 10,
 			Frameworks: []string{"pytorch"}, Notebooks: true, Docker: false, SSH: false,
-			FreeTierNotes: "Free GPU notebook (16-24h quota), Chinese academic network friendly"},
+			FreeTierNotes: "36h one-time NVIDIA A10 24GB quota (new users, PAI-DSW, 10h per run, 1h idle timeout); +100h AMD MI300X 192GB via AMD Developer program (ROCm)"},
 		auth:     bearer,
 		validate: "/users/current", submit: "", // NOTE: submit via ModelScope SDK (ms). Not a REST job API.
 	}
@@ -149,9 +150,9 @@ func NewModelScope() *apiAdapter {
 func NewCloudStudio() *apiAdapter {
 	return &apiAdapter{
 		id: "cloudstudio", name: "Tencent CloudStudio", baseURL: "https://cloudstudio.tencent.com/api",
-		caps: Capabilities{GPUs: capL4, MaxDurationHours: 8,
+		caps: Capabilities{GPUs: []GPU{gpu("T4", 16, 1)}, MaxDurationHours: 8,
 			Frameworks: []string{"pytorch"}, Notebooks: true, Docker: true, SSH: true,
-			FreeTierNotes: "Free cloud dev machines; GPU SKUs limited/region-dependent; Tencent account required"},
+			FreeTierNotes: "~10000 free GPU-minutes/month (~166h, T4 16GB), region-dependent availability; Tencent account + real-name verification; 8h sessions"},
 		auth:     tokenHeader("Authorization"),
 		validate: "", submit: "",
 	}
@@ -180,9 +181,9 @@ func NewLeafcloud() *apiAdapter {
 func NewHFSpaces() *apiAdapter {
 	return &apiAdapter{
 		id: "hf-spaces", name: "Hugging Face Spaces (ZeroGPU)", baseURL: "https://huggingface.co/api",
-		caps: Capabilities{GPUs: []GPU{gpu("H100", 80, 1)}, MaxDurationHours: 1,
+		caps: Capabilities{GPUs: []GPU{gpu("RTX6000Pro", 96, 1)}, MaxDurationHours: 1,
 			Frameworks: []string{"pytorch", "tensorflow", "jax", "gradio"}, Notebooks: false, Docker: true, SSH: false,
-			FreeTierNotes: "ZeroGPU: shared H100 seconds per day on public Spaces; queue-based, 60s limit per call"},
+			FreeTierNotes: "ZeroGPU: shared NVIDIA RTX PRO 6000 Blackwell — large=48GB (1×quota), xlarge=96GB (2×quota). Free accounts: 5 GPU-min/day (~3 runs); PRO 40min/day; resets 24h after first GPU use; Gradio SDK only; 60s/call default"},
 		auth:     bearer,
 		validate: "/whoami-v2",
 		submit:   "", // NOTE: ZeroGPU attaches inside the Space app; no external job-submit API

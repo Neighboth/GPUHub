@@ -1,15 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  ArrowLeft,
-  Ban,
-  Copy,
-  Terminal,
-  Unplug,
-  History,
-  ShieldAlert,
-  AlertCircle,
-} from 'lucide-react';
+import { ArrowLeft, Ban, Copy, Terminal, Unplug, History, ShieldAlert } from 'lucide-react';
 import {
   api,
   errorMessage,
@@ -22,24 +13,9 @@ import {
   attemptProxyLabel,
   type Job,
 } from '../api';
-import {
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  StatusBadge,
-  LoadingBlock,
-  ErrorBlock,
-  Table,
-  THead,
-  TBody,
-  Tr,
-  Th,
-  Td,
-  Modal,
-} from '../components/ui';
+import { Button, Card, CardContent, CardHeader, CardTitle, StatusBadge, LoadingBlock, ErrorBlock, Table, THead, TBody, Tr, Th, Td, Modal } from '../components/ui';
 import { useToast } from '../components/Toast';
+import { useLang, L } from '../i18n';
 import { usd, fmtDateTime, shortId } from '../lib/format';
 
 type WsState = 'connecting' | 'live' | 'error' | 'closed';
@@ -48,6 +24,7 @@ export default function JobDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const toast = useToast();
+  const lang = useLang();
 
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
@@ -67,9 +44,9 @@ export default function JobDetail() {
     api
       .job(id)
       .then(setJob)
-      .catch((e) => setError(errorMessage(e, 'Failed to load job')))
+      .catch((e) => setError(errorMessage(e, lang === 'tr' ? 'İş yüklenemedi' : 'Failed to load job')))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, lang]);
 
   useEffect(() => {
     load();
@@ -130,11 +107,11 @@ export default function JobDetail() {
     setCancelling(true);
     try {
       await api.cancelJob(id);
-      toast('Cancel requested', 'success');
+      toast(L(lang, { en: 'Cancel requested', tr: 'İptal isteği gönderildi' }), 'success');
       setCancelOpen(false);
       load();
     } catch (e) {
-      toast(errorMessage(e, 'Failed to cancel job'), 'error');
+      toast(errorMessage(e, L(lang, { en: 'Failed to cancel job', tr: 'İş iptal edilemedi' })), 'error');
     } finally {
       setCancelling(false);
     }
@@ -144,16 +121,16 @@ export default function JobDetail() {
     if (!job?.id) return;
     navigator.clipboard
       ?.writeText(job.id)
-      .then(() => toast('Job ID copied', 'info'))
-      .catch(() => toast('Could not copy', 'error'));
+      .then(() => toast(L(lang, { en: 'Job ID copied', tr: 'İş ID’si kopyalandı' }), 'info'))
+      .catch(() => toast(L(lang, { en: 'Could not copy', tr: 'Kopyalanamadı' }), 'error'));
   }
 
-  if (loading) return <LoadingBlock label="Loading job…" />;
+  if (loading) return <LoadingBlock label={L(lang, { en: 'Loading job…', tr: 'İş yükleniyor…' })} />;
   if (error || !job) {
     return (
       <div className="space-y-4">
-        <BackButton onClick={() => navigate('/jobs')} />
-        <ErrorBlock message={error || 'Job not found'} onRetry={load} />
+        <BackButton onClick={() => navigate('/')}>{L(lang, { en: 'Back to dashboard', tr: 'Panele dön' })}</BackButton>
+        <ErrorBlock message={error || L(lang, { en: 'Job not found', tr: 'İş bulunamadı' })} onRetry={load} />
       </div>
     );
   }
@@ -161,14 +138,14 @@ export default function JobDetail() {
   const status = (job.status ?? '').toLowerCase();
   const cancelable = status === 'queued' || status === 'running' || status === 'pending';
   const rejections = job.rejections && typeof job.rejections === 'object' ? Object.entries(job.rejections) : [];
-  const attempts = job.attempts ?? [];
+  const attempts = Array.isArray(job.attempts) ? job.attempts : [];
   const cost = jobCostMicros(job);
   const wsFailed = wsState === 'error' || (wsState === 'closed' && lines.length === 0);
   const storedLogs = typeof job.logs === 'string' ? job.logs.trim() : '';
 
   return (
     <div className="space-y-5">
-      <BackButton onClick={() => navigate('/jobs')} />
+      <BackButton onClick={() => navigate('/')}>{L(lang, { en: 'Back to dashboard', tr: 'Panele dön' })}</BackButton>
 
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -183,12 +160,12 @@ export default function JobDetail() {
             <StatusBadge status={job.status} />
           </div>
           <p className="mt-1 text-xs capitalize text-zinc-500">
-            {job.type} · created {fmtDateTime(jobCreatedAt(job))}
+            {job.type} · {L(lang, { en: 'created', tr: 'oluşturuldu' })} {fmtDateTime(jobCreatedAt(job))}
           </p>
         </div>
         {cancelable && (
           <Button variant="danger" onClick={() => setCancelOpen(true)}>
-            <Ban size={14} /> Cancel job
+            <Ban size={14} /> {L(lang, { en: 'Cancel job', tr: 'İşi iptal et' })}
           </Button>
         )}
       </div>
@@ -196,15 +173,12 @@ export default function JobDetail() {
       {/* Metadata grid */}
       <Card>
         <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-          <Meta label="GPU type" value={job.gpu_type ?? 'Any'} />
-          <Meta label="Min VRAM" value={job.min_vram_gb != null ? `${job.min_vram_gb} GB` : '—'} />
-          <Meta label="GPU count" value={job.gpu_count != null ? String(job.gpu_count) : '—'} />
-          <Meta
-            label="Max duration"
-            value={job.max_duration_seconds ? `${job.max_duration_seconds}s` : '—'}
-          />
-          <Meta label="Provider" value={jobProviderName(job)} />
-          <Meta label="Cost" value={cost != null ? usd(cost) : '—'} tone="emerald" />
+          <Meta label={L(lang, { en: 'GPU type', tr: 'GPU tipi' })} value={job.gpu_type ?? 'Any'} />
+          <Meta label={L(lang, { en: 'Min VRAM', tr: 'Min VRAM' })} value={job.min_vram_gb != null ? `${job.min_vram_gb} GB` : '—'} />
+          <Meta label={L(lang, { en: 'GPU count', tr: 'GPU adedi' })} value={job.gpu_count != null ? String(job.gpu_count) : '—'} />
+          <Meta label={L(lang, { en: 'Max duration', tr: 'Maks süre' })} value={job.max_duration_seconds ? `${job.max_duration_seconds}s` : '—'} />
+          <Meta label={L(lang, { en: 'Provider', tr: 'Sağlayıcı' })} value={jobProviderName(job)} />
+          <Meta label={L(lang, { en: 'Cost', tr: 'Maliyet' })} value={cost != null ? usd(cost) : '—'} tone="emerald" />
         </CardContent>
       </Card>
 
@@ -215,7 +189,7 @@ export default function JobDetail() {
           {rejections.length > 0 && (
             <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-4">
               <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-400">
-                <ShieldAlert size={14} /> Why unschedulable — provider rejections
+                <ShieldAlert size={14} /> {L(lang, { en: 'Why unschedulable — provider rejections', tr: 'Neden unschedulable — sağlayıcı retleri' })}
               </div>
               <ul className="space-y-1.5">
                 {rejections.map(([provider, reason]) => (
@@ -234,27 +208,27 @@ export default function JobDetail() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <History size={14} className="text-zinc-500" /> Failover history
+                <History size={14} className="text-zinc-500" /> {L(lang, { en: 'Failover history', tr: 'Failover geçmişi' })}
               </CardTitle>
               <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
-                {attempts.length} attempt{attempts.length === 1 ? '' : 's'}
+                {attempts.length} {L(lang, { en: 'attempt(s)', tr: 'deneme' })}
               </span>
             </CardHeader>
             <CardContent className="p-0">
               {attempts.length === 0 ? (
                 <div className="px-5 py-6 text-center text-xs text-zinc-600">
-                  No attempts yet — the scheduler has not placed this job.
+                  {L(lang, { en: 'No attempts yet — the scheduler has not placed this job.', tr: 'Henüz deneme yok — scheduler bu işi henüz yerleştiremedi.' })}
                 </div>
               ) : (
                 <Table className="rounded-none border-0">
                   <THead>
                     <Tr>
-                      <Th>Provider</Th>
-                      <Th>Key</Th>
+                      <Th>{L(lang, { en: 'Provider', tr: 'Sağlayıcı' })}</Th>
+                      <Th>{L(lang, { en: 'Key', tr: 'Anahtar' })}</Th>
                       <Th>Proxy</Th>
-                      <Th>Status</Th>
-                      <Th>Error</Th>
-                      <Th>Started</Th>
+                      <Th>{L(lang, { en: 'Status', tr: 'Durum' })}</Th>
+                      <Th>{L(lang, { en: 'Error', tr: 'Hata' })}</Th>
+                      <Th>{L(lang, { en: 'Started', tr: 'Başlangıç' })}</Th>
                     </Tr>
                   </THead>
                   <TBody>
@@ -263,12 +237,8 @@ export default function JobDetail() {
                         <Td className="text-xs text-zinc-200">{a.provider_name ?? a.provider ?? '—'}</Td>
                         <Td className="font-mono text-[11px] text-zinc-400">{attemptKeyLabel(a)}</Td>
                         <Td className="font-mono text-[11px] text-zinc-400">{attemptProxyLabel(a)}</Td>
-                        <Td>
-                          <StatusBadge status={a.status ?? 'unknown'} />
-                        </Td>
-                        <Td className="max-w-[160px] truncate text-[11px] text-red-300/90" title={a.error ?? ''}>
-                          {a.error ?? '—'}
-                        </Td>
+                        <Td><StatusBadge status={a.status ?? 'unknown'} /></Td>
+                        <Td className="max-w-[160px] truncate text-[11px] text-red-300/90" title={a.error ?? ''}>{a.error ?? '—'}</Td>
                         <Td className="text-[11px] text-zinc-500">{fmtDateTime(attemptStartedAt(a))}</Td>
                       </Tr>
                     ))}
@@ -283,7 +253,7 @@ export default function JobDetail() {
         <Card className="xl:col-span-3">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Terminal size={14} className="text-zinc-500" /> Logs
+              <Terminal size={14} className="text-zinc-500" /> {L(lang, { en: 'Logs', tr: 'Loglar' })}
             </CardTitle>
             <WsIndicator state={wsState} failed={wsFailed} />
           </CardHeader>
@@ -291,7 +261,7 @@ export default function JobDetail() {
             {wsFailed && storedLogs ? (
               <>
                 <div className="mb-2 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-amber-500/90">
-                  <Unplug size={11} /> Live stream unavailable — showing stored logs
+                  <Unplug size={11} /> {L(lang, { en: 'Live stream unavailable — showing stored logs', tr: 'Canlı akış yok — kayıtlı loglar gösteriliyor' })}
                 </div>
                 <pre className="h-96 overflow-auto whitespace-pre-wrap rounded-lg border border-zinc-800 bg-zinc-950 p-3 font-mono text-[11px] leading-relaxed text-zinc-300">
                   {storedLogs}
@@ -305,18 +275,16 @@ export default function JobDetail() {
                 {lines.length === 0 ? (
                   <span className="text-zinc-600">
                     {wsState === 'connecting'
-                      ? 'Connecting to log stream…'
+                      ? L(lang, { en: 'Connecting to log stream…', tr: 'Log akışına bağlanılıyor…' })
                       : wsState === 'live'
-                        ? 'Connected — waiting for log output…'
+                        ? L(lang, { en: 'Connected — waiting for log output…', tr: 'Bağlandı — log çıktısı bekleniyor…' })
                         : wsFailed
-                          ? 'Live stream unavailable and no stored logs were returned.'
-                          : 'Stream closed. No log output received.'}
+                          ? L(lang, { en: 'Live stream unavailable and no stored logs were returned.', tr: 'Canlı akış yok ve kayıtlı log da dönmedi.' })
+                          : L(lang, { en: 'Stream closed. No log output received.', tr: 'Akış kapandı. Log çıktısı alınmadı.' })}
                   </span>
                 ) : (
                   lines.map((l, i) => (
-                    <div key={i} className="hover:bg-zinc-900/60">
-                      {l || ' '}
-                    </div>
+                    <div key={i} className="hover:bg-zinc-900/60">{l || ' '}</div>
                   ))
                 )}
               </div>
@@ -329,24 +297,27 @@ export default function JobDetail() {
       <Modal
         open={cancelOpen}
         onClose={() => setCancelOpen(false)}
-        title="Cancel job"
+        title={L(lang, { en: 'Cancel job', tr: 'İşi iptal et' })}
         footer={
           <>
             <Button variant="ghost" onClick={() => setCancelOpen(false)}>
-              Keep running
+              {L(lang, { en: 'Keep running', tr: 'Çalışmaya devam et' })}
             </Button>
             <Button variant="danger" onClick={onCancel} loading={cancelling}>
-              <Ban size={14} /> Cancel job
+              <Ban size={14} /> {L(lang, { en: 'Cancel job', tr: 'İşi iptal et' })}
             </Button>
           </>
         }
       >
         <div className="space-y-3 text-sm text-zinc-300">
           <p>
-            Cancel job <span className="font-mono text-zinc-100">{shortId(job.id, 12)}</span>?
+            {L(lang, { en: 'Cancel job', tr: 'İş iptal edilsin' })} <span className="font-mono text-zinc-100">{shortId(job.id, 12)}</span>?
           </p>
           <p className="text-xs text-zinc-500">
-            The scheduler will stop attempting placement and signal the provider to abort the workload. This cannot be undone.
+            {L(lang, {
+              en: 'The scheduler will stop placing this job and signal the provider to abort the workload. This cannot be undone.',
+              tr: 'Scheduler bu işi yerleştirmeyi bırakır ve sağlayıcıya yükü durdur sinyali gönderir. Bu işlem geri alınamaz.',
+            })}
           </p>
         </div>
       </Modal>
@@ -354,47 +325,41 @@ export default function JobDetail() {
   );
 }
 
-function BackButton({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-500 transition-colors hover:text-zinc-100"
-    >
-      <ArrowLeft size={14} /> Back to jobs
-    </button>
-  );
-}
-
 function Meta({ label, value, tone }: { label: string; value: string; tone?: 'emerald' }) {
   return (
-    <div>
+    <div className="min-w-0">
       <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">{label}</div>
-      <div className={`mt-1 text-sm font-semibold ${tone === 'emerald' ? 'text-emerald-400' : 'text-zinc-100'}`}>
+      <div className={`mt-1 truncate text-sm font-medium ${tone === 'emerald' ? 'text-emerald-400' : 'text-zinc-100'}`}>
         {value}
       </div>
     </div>
   );
 }
 
-function WsIndicator({ state, failed }: { state: WsState; failed: boolean }) {
-  if (failed) {
-    return (
-      <span className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-red-400">
-        <AlertCircle size={11} /> disconnected
-      </span>
-    );
-  }
-  const styles: Record<WsState, { dot: string; text: string; label: string }> = {
-    connecting: { dot: 'bg-amber-400', text: 'text-amber-400', label: 'connecting' },
-    live: { dot: 'bg-emerald-400 animate-pulse', text: 'text-emerald-400', label: 'live' },
-    closed: { dot: 'bg-zinc-500', text: 'text-zinc-500', label: 'closed' },
-    error: { dot: 'bg-red-400', text: 'text-red-400', label: 'error' },
-  };
-  const s = styles[state];
+function BackButton({ onClick, children }: { onClick: () => void; children?: ReactNode }) {
   return (
-    <span className={`flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider ${s.text}`}>
-      <span className={`h-2 w-2 rounded-full ${s.dot}`} />
-      {s.label}
+    <button
+      onClick={onClick}
+      className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-500 transition-colors hover:text-zinc-100"
+    >
+      <ArrowLeft size={13} />
+      {children ?? 'Back'}
+    </button>
+  );
+}
+
+function WsIndicator({ state, failed }: { state: WsState; failed: boolean }) {
+  const map: Record<WsState, { label: string; cls: string; dot: string }> = {
+    connecting: { label: 'CONNECTING', cls: 'border-amber-500/30 bg-amber-500/10 text-amber-400', dot: 'bg-amber-400 animate-pulse' },
+    live: { label: 'LIVE', cls: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400', dot: 'bg-emerald-400 animate-pulse' },
+    error: { label: 'ERROR', cls: 'border-red-500/30 bg-red-500/10 text-red-400', dot: 'bg-red-400' },
+    closed: { label: 'CLOSED', cls: 'border-zinc-700 bg-zinc-800/60 text-zinc-400', dot: 'bg-zinc-500' },
+  };
+  const m = map[state] ?? map.closed;
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${m.cls}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${m.dot}`} />
+      {failed ? 'OFF' : m.label}
     </span>
   );
 }

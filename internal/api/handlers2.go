@@ -215,8 +215,8 @@ func (s *Server) handleDeleteKey(w http.ResponseWriter, r *http.Request) {
 }
 
 type reassignReq struct {
-	ProxyID int64 `json:"proxy_id"`
-	Force   bool  `json:"force"` // admin approval to steal the proxy from another key
+	ProxyID int64 `json:"proxy_id"` // 0 = unbind (key becomes direct egress)
+	Force   bool  `json:"force"`    // admin approval to steal the proxy from another key
 }
 
 func (s *Server) handleReassignProxy(w http.ResponseWriter, r *http.Request) {
@@ -228,10 +228,6 @@ func (s *Server) handleReassignProxy(w http.ResponseWriter, r *http.Request) {
 	var req reassignReq
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return
-	}
-	if req.ProxyID == 0 {
-		writeError(w, http.StatusBadRequest, "proxy_id is required")
 		return
 	}
 	username := userFrom(r.Context()).Username
@@ -253,29 +249,51 @@ func (s *Server) handleReassignProxy(w http.ResponseWriter, r *http.Request) {
 		oldProxyLabel = "(none)"
 	}
 	var newProxyLabel string
-	if err := tx.QueryRowContext(r.Context(), `SELECT label FROM proxies WHERE id=?`, req.ProxyID).Scan(&newProxyLabel); err != nil {
-		writeError(w, http.StatusBadRequest, "proxy does not exist")
-		return
+	if req.ProxyID != 0 {
+		if err := tx.QueryRowContext(r.Context(), `SELECT label FROM proxies WHERE id=?`, req.ProxyID).Scan(&newProxyLabel); err != nil {
+			writeError(w, http.StatusBadRequest, "proxy does not exist")
+			return
+		}
+	} else {
+		newProxyLabel = "(direct — no proxy)"
 	}
 	var boundKeyID sql.NullInt64
 	var boundKeyLabel string
 	stolen := false
-	if err := tx.QueryRowContext(r.Context(), `SELECT id, label FROM provider_keys WHERE bound_proxy_id=? AND id<>?`, req.ProxyID, keyID).Scan(&boundKeyID, &boundKeyLabel); err == nil {
-		if !req.Force {
-			writeJSON(w, http.StatusConflict, map[string]any{
-				"error":           "proxy already bound to another key",
-				"bound_key_id":    boundKeyID.Int64,
-				"bound_key_label": boundKeyLabel,
-				"hint":            "resubmit with force=true to detach it from that key (it will be disabled) and rebind here",
-			})
-			return
+	if req.ProxyID != 0 {
+		if err := tx.QueryRowContext(r.Context(), `SELECT id, label FROM provider_keys WHERE bound_proxy_id=? AND id<>?`, req.ProxyID, keyID).Scan(&boundKeyID, &boundKeyLabel); err == nil {
+			if !req.Force {
+				writeJSON(w, http.StatusConflict, map[string]any{
+					"error":           "proxy already bound to another key",
+					"bound_key_id":    boundKeyID.Int64,
+					"bound_key_label": boundKeyLabel,
+					"hint":            "resubmit with force=true to detach it from that key (it will be disabled) and rebind here",
+				})
+				return
+			}
+			// Admin-approved steal: detach + disable previous owner.
+			if _, err := tx.ExecContext(r.Context(), `UPDATE provider_keys SET bound_proxy_id=NULL, active=0 WHERE id=?`, boundKeyID.Int64); err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			stolen = true
 		}
-		// Admin-approved steal: detach + disable previous owner.
-		if _, err := tx.ExecContext(r.Context(), `UPDATE provider_keys SET bound_proxy_id=NULL, active=0 WHERE id=?`, boundKeyID.Int64); err != nil {
+	} else {
+		// Unbind: key stays active but switches to direct egress (sticky binding removed).
+		if _, err := tx.ExecContext(r.Context(), `UPDATE provider_keys SET bound_proxy_id=NULL, active=1 WHERE id=?`, keyID); err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		stolen = true
+		if err := tx.Commit(); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		s.proxies.InvalidateTransport(keyID)
+		audit.Log(r.Context(), s.db, username, "proxy_unbind",
+			fmt.Sprintf("key_id=%d key=%q from_proxy=%q — key now uses direct egress", keyID, keyLabel, oldProxyLabel))
+		s.notify(r.Context(), "info", fmt.Sprintf("Key %q (id=%d) was unbound from proxy %q by %s — now uses direct egress.", keyLabel, keyID, oldProxyLabel, username))
+		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "key_id": keyID, "proxy_id": 0, "direct": true})
+		return
 	}
 	if _, err := tx.ExecContext(r.Context(), `UPDATE provider_keys SET bound_proxy_id=?, active=1 WHERE id=?`, req.ProxyID, keyID); err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {

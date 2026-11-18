@@ -42,6 +42,10 @@ function boundKeyOf(p: ProxyItem): { label?: string; provider?: string } | null 
   }
   const first = p.bound_keys?.find((k) => k.label || k.id);
   if (first) return { label: first.label, provider: first.provider ?? first.provider_name };
+  // My backend sends flat fields:
+  if (p.bound_key_label || p.bound_key_id) {
+    return { label: p.bound_key_label ?? `key #${p.bound_key_id}`, provider: p.bound_provider_id ?? undefined };
+  }
   return null;
 }
 
@@ -176,7 +180,7 @@ export default function Proxies() {
         <EmptyState
           icon={Network}
           title="No proxies yet"
-          subtitle="Add an egress proxy. API keys can then be permanently bound to it — a binding required for a key to be scheduled."
+          subtitle="Add an egress proxy. API keys can then be permanently bound to it — optional; without one the key connects directly."
           action={
             <Button size="sm" variant="primary" onClick={() => setAddOpen(true)}>
               <Plus size={14} /> Add your first proxy
@@ -205,8 +209,8 @@ export default function Proxies() {
                     <code className="text-[10px] text-zinc-600">{p.id}</code>
                   </Td>
                   <Td>
-                    <code className="block max-w-[280px] truncate text-[11px] text-zinc-400" title={maskProxyUrl(p.url)}>
-                      {maskProxyUrl(p.url)}
+                    <code className="block max-w-[280px] truncate text-[11px] text-zinc-400" title={p.url ?? p.url_masked}>
+                      {p.url_masked ?? maskProxyUrl(p.url)}
                     </code>
                   </Td>
                   <Td>

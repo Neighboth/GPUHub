@@ -132,7 +132,7 @@ func NewValohai() *apiAdapter {
 func NewDetermined() *apiAdapter {
 	return &apiAdapter{
 		id: "determined", name: "Determined AI (self-hosted)", baseURL: "http://localhost:8080/api/v1",
-		caps: Capabilities{GPUs: capAnyFreeSmall, MaxDurationHours: 0,
+		caps: Capabilities{GPUs: capSelfHost, MaxDurationHours: 0,
 			Frameworks: []string{"pytorch", "tensorflow"}, Notebooks: true, Docker: true, SSH: true,
 			FreeTierNotes: "Open source (Apache-2.0) — free on your own GPUs; point base_url at your master"},
 		auth:     bearer,
@@ -148,7 +148,7 @@ func NewDetermined() *apiAdapter {
 func NewClearML() *apiAdapter {
 	return &apiAdapter{
 		id: "clearml", name: "ClearML", baseURL: "https://api.app.clear.ml/api/v2.25",
-		caps: Capabilities{GPUs: capAnyFreeSmall, MaxDurationHours: 0,
+		caps: Capabilities{GPUs: capSelfHost, MaxDurationHours: 0,
 			Frameworks: []string{"pytorch", "tensorflow", "jax"}, Notebooks: true, Docker: true, SSH: false,
 			FreeTierNotes: "Free hosted orchestration; GPU comes from your own ClearML agents (no hosted GPU)"},
 		auth: func(p CredentialPayload) (string, string) {

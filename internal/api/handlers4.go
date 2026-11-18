@@ -22,11 +22,13 @@ type createJobReq struct {
 	Type               string   `json:"type"`
 	Payload            string   `json:"payload"`
 	GPUType            string   `json:"gpu_type"`
+	GPUTypeFallback    []string `json:"gpu_type_fallback"`
 	MinVRAMGB          int      `json:"min_vram_gb"`
 	GPUCount           int      `json:"gpu_count"`
 	MaxDurationSeconds int      `json:"max_duration_seconds"`
 	ProviderPreference []string `json:"provider_preference"`
 	MaxCostUSD         float64  `json:"max_cost_usd"`
+	SessionRenew       bool     `json:"session_renew"`
 }
 
 func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
@@ -44,6 +46,12 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 	if !providers.GPUTypeValid(req.GPUType) {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown gpu_type %q — known: %s", req.GPUType, strings.Join(providers.KnownGPUTypes(), ", ")))
 		return
+	}
+	for _, fb := range req.GPUTypeFallback {
+		if !providers.GPUTypeValid(fb) {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown gpu_type_fallback entry %q", fb))
+			return
+		}
 	}
 	if req.MinVRAMGB < 1 {
 		writeError(w, http.StatusBadRequest, "min_vram_gb is required and must be >= 1 (e.g. 16, 24, 40, 80)")
@@ -77,9 +85,14 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	pref, _ := json.Marshal(req.ProviderPreference)
+	fallback, _ := json.Marshal(req.GPUTypeFallback)
 	maxCost := int64(req.MaxCostUSD * 1_000_000)
-	res, err := s.db.ExecContext(r.Context(), `INSERT INTO jobs(type, payload, gpu_type, min_vram_gb, gpu_count, max_duration_seconds, provider_preference, max_cost_usd_micros, status)
-		VALUES(?,?,?,?,?,?,?,?,'queued')`, req.Type, req.Payload, req.GPUType, req.MinVRAMGB, req.GPUCount, req.MaxDurationSeconds, string(pref), maxCost)
+	sessionRenew := 0
+	if req.SessionRenew {
+		sessionRenew = 1
+	}
+	res, err := s.db.ExecContext(r.Context(), `INSERT INTO jobs(type, payload, gpu_type, gpu_fallback, min_vram_gb, gpu_count, max_duration_seconds, provider_preference, max_cost_usd_micros, session_renew, status)
+		VALUES(?,?,?,?,?,?,?,?,?,?,'queued')`, req.Type, req.Payload, req.GPUType, string(fallback), req.MinVRAMGB, req.GPUCount, req.MaxDurationSeconds, string(pref), maxCost, sessionRenew)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -91,44 +104,49 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 }
 
 type jobRow struct {
-	ID            int64    `json:"id"`
-	Type          string   `json:"type"`
-	Payload       string   `json:"payload"`
-	GPUType       string   `json:"gpu_type"`
-	MinVRAMGB     int      `json:"min_vram_gb"`
-	GPUCount      int      `json:"gpu_count"`
-	MaxDuration   int      `json:"max_duration_seconds"`
-	ProviderPref  []string `json:"provider_preference"`
-	MaxCostMicros int64    `json:"max_cost_usd_micros"`
-	Status        string   `json:"status"`
-	ProviderID    *string  `json:"provider_id"`
-	KeyID         *int64   `json:"key_id"`
-	RemoteID      *string  `json:"remote_id"`
-	Attempts      int      `json:"attempts"`
-	CostMicros    int64    `json:"cost_usd_micros"`
-	FailReason    string   `json:"fail_reason"`
-	Rejections    any      `json:"rejections"`
-	Logs          string   `json:"logs,omitempty"`
-	CreatedAt     string   `json:"created_at"`
-	UpdatedAt     string   `json:"updated_at"`
-	StartedAt     *string  `json:"started_at"`
-	FinishedAt    *string  `json:"finished_at"`
+	ID              int64    `json:"id"`
+	Type            string   `json:"type"`
+	Payload         string   `json:"payload"`
+	GPUType         string   `json:"gpu_type"`
+	GPUTypeFallback []string `json:"gpu_type_fallback"`
+	MinVRAMGB       int      `json:"min_vram_gb"`
+	GPUCount        int      `json:"gpu_count"`
+	MaxDuration     int      `json:"max_duration_seconds"`
+	ProviderPref    []string `json:"provider_preference"`
+	MaxCostMicros   int64    `json:"max_cost_usd_micros"`
+	SessionRenew    bool     `json:"session_renew"`
+	Status          string   `json:"status"`
+	ProviderID      *string  `json:"provider_id"`
+	KeyID           *int64   `json:"key_id"`
+	RemoteID        *string  `json:"remote_id"`
+	Attempts        int      `json:"attempts"`
+	CostMicros      int64    `json:"cost_usd_micros"`
+	FailReason      string   `json:"fail_reason"`
+	Rejections      any      `json:"rejections"`
+	Logs            string   `json:"logs,omitempty"`
+	CreatedAt       string   `json:"created_at"`
+	UpdatedAt       string   `json:"updated_at"`
+	StartedAt       *string  `json:"started_at"`
+	FinishedAt      *string  `json:"finished_at"`
 }
 
 func scanJob(row interface{ Scan(...any) error }) (jobRow, error) {
 	var j jobRow
-	var pref, rejections string
+	var pref, rejections, fallback string
 	var providerID, remoteID, started, finished sql.NullString
 	var keyID sql.NullInt64
 	var startedTime, finishedTime sql.NullTime
 	var created, updated time.Time
-	err := row.Scan(&j.ID, &j.Type, &j.Payload, &j.GPUType, &j.MinVRAMGB, &j.GPUCount, &j.MaxDuration,
-		&pref, &j.MaxCostMicros, &j.Status, &providerID, &keyID, &remoteID, &j.Attempts,
+	var renew int
+	err := row.Scan(&j.ID, &j.Type, &j.Payload, &j.GPUType, &fallback, &j.MinVRAMGB, &j.GPUCount, &j.MaxDuration,
+		&pref, &j.MaxCostMicros, &renew, &j.Status, &providerID, &keyID, &remoteID, &j.Attempts,
 		&j.CostMicros, &j.FailReason, &rejections, &j.Logs, &created, &updated, &startedTime, &finishedTime)
 	if err != nil {
 		return j, err
 	}
+	j.SessionRenew = renew == 1
 	_ = json.Unmarshal([]byte(pref), &j.ProviderPref)
+	_ = json.Unmarshal([]byte(fallback), &j.GPUTypeFallback)
 	_ = json.Unmarshal([]byte(rejections), &j.Rejections)
 	if providerID.Valid {
 		j.ProviderID = &providerID.String
@@ -155,8 +173,8 @@ func scanJob(row interface{ Scan(...any) error }) (jobRow, error) {
 	return j, nil
 }
 
-const jobSelect = `SELECT id,type,payload,gpu_type,min_vram_gb,gpu_count,max_duration_seconds,
-provider_preference,max_cost_usd_micros,status,provider_id,key_id,remote_id,attempts,
+const jobSelect = `SELECT id,type,payload,gpu_type,gpu_fallback,min_vram_gb,gpu_count,max_duration_seconds,
+provider_preference,max_cost_usd_micros,session_renew,status,provider_id,key_id,remote_id,attempts,
 cost_usd_micros,fail_reason,rejections,logs,created_at,updated_at,started_at,finished_at FROM jobs`
 
 func (s *Server) handleListJobs(w http.ResponseWriter, r *http.Request) {
