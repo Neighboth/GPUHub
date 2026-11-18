@@ -1,7 +1,7 @@
 # GPUHub
 
 **Self-hosted orchestration platform for FREE-tier, compute/notebook GPU providers.**
-One web UI, one REST API, one job queue — many free GPU clouds. GPUHub schedules GPU workloads
+One web UI, one REST API, one job queue - many free GPU clouds. GPUHub schedules GPU workloads
 only onto providers whose free tier offers compute (notebook/instance) GPUs. Inference APIs
 and paid/trial-credit-only providers are out of scope by design.
 
@@ -34,7 +34,7 @@ If `ADMIN_PASSWORD` is set, the admin is created on first boot; otherwise the UI
 
 Smoke test: `./scripts/smoke.sh` (login → create proxy → add Kaggle key → submit T4 job → fetch detail).
 
-**What to expect on a first run:** the sample proxy in `smoke.sh` (`127.0.0.1:3128`) is intentionally unreachable — GPUHub's health loop will mark it unhealthy within 60s, deactivate any key bound to it, write an `audit_log` entry and a critical notification ("NO automatic rebinding performed"), and the job will end `unschedulable` with per-provider rejection reasons. That is the *correct* system behavior, not a bug: GPUHub never silently rebinds keys.
+**What to expect on a first run:** the sample proxy in `smoke.sh` (`127.0.0.1:3128`) is intentionally unreachable - GPUHub's health loop will mark it unhealthy within 60s, deactivate any key bound to it, write an `audit_log` entry and a critical notification ("NO automatic rebinding performed"), and the job will end `unschedulable` with per-provider rejection reasons. That is the *correct* system behavior, not a bug: GPUHub never silently rebinds keys.
 
 **Re-enabling after a health-check disable:** fix/replace the proxy (or assign a new one via `PATCH /api/v1/keys/{key_id}/proxy`), then re-activate the key in the Keys page (`active` toggle) and resubmit the job.
 
@@ -80,7 +80,7 @@ Every job carries mandatory GPU requirements (API and UI both enforce):
   "type": "script|notebook|docker|command",
   "payload": "...",
   "gpu_type": "A100",                     // or T4 P100 V100 A10 A100 H100 H200 L4 L40S RTX4090 RTX6000Ada RTX6000Pro B200 B300 MI300X Gaudi2 M4000 P4000 any
-  "gpu_type_fallback": ["H100", "L40S", "T4"],   // OPTIONAL ordered fallback chain — tried in order when gpu_type is unavailable
+  "gpu_type_fallback": ["H100", "L40S", "T4"],   // OPTIONAL ordered fallback chain - tried in order when gpu_type is unavailable
   "min_vram_gb": 16,                      // integer GB; required (≥1)
   "gpu_count": 1,                         // 1..8
   "session_renew": false                  // true → scheduler re-queues on unexpected death; payload sees GPUHUB_ATTEMPT/GPUHUB_RESUME envs
@@ -95,33 +95,33 @@ Scheduler filter per provider:
 2. Any offering GPU must have `vram_gb >= min_vram_gb`.
 3. `gpu_count <= max_count` of the offering.
 4. The lowest-VRAM fitting GPU of the highest-priority requested type wins (least waste).
-5. Provider must be enabled AND have ≥1 eligible key (active, not in cooldown, not over local daily/weekly quota — proxy binding is now OPTIONAL, see below).
+5. Provider must be enabled AND have ≥1 eligible key (active, not in cooldown, not over local daily/weekly quota - proxy binding is now OPTIONAL, see below).
 6. `provider_preference: ["modal"]` restricts candidates to the listed ids.
 7. Provider-side quota ≥ 90% watermark (`GPUHUB_QUOTA_HIGH_WATERMARK`) → key skipped.
 8. If nothing fits → job marked **`unschedulable`** and the UI shows *why* per provider.
 
 `any` selects the most suitable offering by quota headroom + priority.
 
-**VRAM-only jobs**: set `gpu_type: "any"` and `min_vram_gb: N` — the scheduler picks any GPU with ≥N GB. Combine with `provider_preference` to constrain where. **GPU chains**: `gpu_type_fallback` gives ordered fallbacks *within one request* — e.g. `"gpu_type": "A100", "gpu_type_fallback": ["H100", "L40S"]` runs on A100 if offered, else H100, else L40S — useful when free tiers bounce availability.
+**VRAM-only jobs**: set `gpu_type: "any"` and `min_vram_gb: N` - the scheduler picks any GPU with ≥N GB. Combine with `provider_preference` to constrain where. **GPU chains**: `gpu_type_fallback` gives ordered fallbacks *within one request* - e.g. `"gpu_type": "A100", "gpu_type_fallback": ["H100", "L40S"]` runs on A100 if offered, else H100, else L40S - useful when free tiers bounce availability.
 
 ## Multi-key rotation
 
-Each provider accepts N keys. Every key has: `label`, `credential` (AES-256-GCM encrypted), `bound_proxy_id` (**now OPTIONAL** — omit for direct egress; 1:1 binding when present), `daily_quota` / `weekly_quota` (local accounting via `key_usage`, auto-reset per day/ISO-week), `priority` (lower = preferred), `weight` (for weighted rotation), `active`, `cooldown_until`, `error_count`, `consecutive_errors`.
+Each provider accepts N keys. Every key has: `label`, `credential` (AES-256-GCM encrypted), `bound_proxy_id` (**now OPTIONAL** - omit for direct egress; 1:1 binding when present), `daily_quota` / `weekly_quota` (local accounting via `key_usage`, auto-reset per day/ISO-week), `priority` (lower = preferred), `weight` (for weighted rotation), `active`, `cooldown_until`, `error_count`, `consecutive_errors`.
 
 Key rotation (never proxies) strategies, chosen in Settings (`rotation_strategy` / `scheduler_strategy`):
 
-- `round_robin` — least-recently-used key first
-- `least_used` — lowest `usage_today` first
-- `most_quota` — most remaining daily/weekly allowance first (default)
-- `weighted` — weighted random by `weight`
+- `round_robin` - least-recently-used key first
+- `least_used` - lowest `usage_today` first
+- `most_quota` - most remaining daily/weekly allowance first (default)
+- `weighted` - weighted random by `weight`
 
 Failure handling: on submit error (429/5xx/network) the key gets `consecutive_errors++` and `cooldown_until = now + 2^min(n,6)` minutes (2,4,8,16,32,64). At 5 consecutive errors the key is **auto-disabled** and the admin is notified (`notifications` + optional webhook). Success resets the counter. Cooldown expiry is the only automatic way back.
 
 ## STICKY PROXY binding
 
-**Rule: a proxy, once bound to a key, stays bound — forever — until (a) an admin manually reassigns it, or (b) the proxy is deleted or fails health checks. GPUHub never rotates proxies and never auto-rebinds keys.**
+**Rule: a proxy, once bound to a key, stays bound - forever - until (a) an admin manually reassigns it, or (b) the proxy is deleted or fails health checks. GPUHub never rotates proxies and never auto-rebinds keys.**
 
-> **Binding is optional since 2026-11.** A key with no proxy uses direct egress (no pinning, no sticky transport — but also no proxy protection). The 1:1 sticky rules below apply only to keys WITH a proxy bound. Proxy deletion behaves as before: bound keys become proxy-less, disabled, and are NEVER auto-rebound. Admins can unbind via `PATCH /api/v1/keys/{key_id}/proxy` with `{"proxy_id": 0}` — the key stays active on direct egress.
+> **Binding is optional since 2026-11.** A key with no proxy uses direct egress (no pinning, no sticky transport - but also no proxy protection). The 1:1 sticky rules below apply only to keys WITH a proxy bound. Proxy deletion behaves as before: bound keys become proxy-less, disabled, and are NEVER auto-rebound. Admins can unbind via `PATCH /api/v1/keys/{key_id}/proxy` with `{"proxy_id": 0}` - the key stays active on direct egress.
 
 ```
 ┌───────────┐        1:1 (UNIQUE index on bound_proxy_id WHERE NOT NULL)
@@ -143,10 +143,10 @@ Failure handling: on submit error (429/5xx/network) the key gets `consecutive_er
 
 Assignment flows:
 1. **Key creation** requires `bound_proxy_id` of an *unbound* proxy. If the proxy is already bound → 409 with the owning key id/label; admin may retry with `force: true` on reassign to detach the old key (it's disabled + audit-logged) and bind the new one.
-2. **Manual reassign** — `PATCH /api/v1/keys/{key_id}/proxy` (admin only), body `{"proxy_id": N, "force": false}`. Audit-logged as `proxy_reassign` / `proxy_reassign_force`. The transport cache is invalidated for the two affected keys.
-3. **Proxy deletion** — `DELETE /api/v1/proxies/{id}`: bound keys get `bound_proxy_id=NULL, active=0` ("no proxy" state), are **NOT** rebound, admins are notified per key; the deletion is audit-logged. Re-binding is a manual admin action.
-4. **Health failures** — every 60s (`GPUHUB_PROXY_HEALTH_URL`), proxies bound to ≥1 key are tested. Unhealthy → proxy marked `unhealthy`, bound keys deactivated, admin notified (`notifications`, webhook, audit). **No automatic rebinding, ever.** Keys stay bound to the failed proxy for traceability; an admin decides the next binding. A `healthy` recovery does NOT auto-reactivate keys — re-enable manually after you trust the proxy again. Health checks are single-strike by design (alert + disable fast); the binding itself never moves.
-5. **URL edits** — changing a proxy's URL invalidates cached transports of bound keys (connection pools rebuilt against the new URL; the binding itself stays 1:1).
+2. **Manual reassign** - `PATCH /api/v1/keys/{key_id}/proxy` (admin only), body `{"proxy_id": N, "force": false}`. Audit-logged as `proxy_reassign` / `proxy_reassign_force`. The transport cache is invalidated for the two affected keys.
+3. **Proxy deletion** - `DELETE /api/v1/proxies/{id}`: bound keys get `bound_proxy_id=NULL, active=0` ("no proxy" state), are **NOT** rebound, admins are notified per key; the deletion is audit-logged. Re-binding is a manual admin action.
+4. **Health failures** - every 60s (`GPUHUB_PROXY_HEALTH_URL`), proxies bound to ≥1 key are tested. Unhealthy → proxy marked `unhealthy`, bound keys deactivated, admin notified (`notifications`, webhook, audit). **No automatic rebinding, ever.** Keys stay bound to the failed proxy for traceability; an admin decides the next binding. A `healthy` recovery does NOT auto-reactivate keys - re-enable manually after you trust the proxy again. Health checks are single-strike by design (alert + disable fast); the binding itself never moves.
+5. **URL edits** - changing a proxy's URL invalidates cached transports of bound keys (connection pools rebuilt against the new URL; the binding itself stays 1:1).
 
 There is intentionally **no** "proxy rotate" setting anywhere in config, env, UI or API.
 
@@ -167,57 +167,57 @@ mgr.ClientForKey(ctx, keyID)        // only way adapters get an *http.Client
 
 States: `queued → scheduling → running → succeeded | failed | cancelled | timeout | unschedulable`.
 
-1. **schedule** — optimistic `UPDATE … SET status='scheduling' WHERE status='queued'` picks the job; candidates are filtered/sorted by rotation strategy; each attempt is recorded in `job_attempts` (provider, key, proxy, status, error).
-2. **submit** — success pins `provider_id`, `key_id`, `remote_id`, sets `running`; increments key usage + `key_usage` table.
-3. **failover** — on 429 (recorded as `quota`), 5xx, or network error: key cools down exponentially; scheduler tries the *next* candidate within the same pass; job stays `queued` until `attempts >= max_retries` → `failed` with `fail_reason`, or all fits were transient (cooldown) → remains `queued`.
-4. **poll** — running jobs are polled every `poll_interval` (5s). Provider state is normalized (`COMPLETED`, `done`, `FINISHED` → `succeeded`, …). On failure/timeout: if attempts remain → requeue with cleared binding (next provider), else terminal `failed|timeout`.
-5. **cost cap** — if `cost_usd_micros > max_cost_usd`, the job is cancelled remotely and failed with `max_cost_usd exceeded`.
-6. **timeout** — `max_duration_seconds` exceeded → remote cancel + same failover logic.
-7. **logs** — full log text stored on the job row; WebSocket `GET /api/v1/jobs/{id}/logs?token=…` streams the buffer live; REST falls back to `GET /api/v1/jobs/{id}`.
+1. **schedule** - optimistic `UPDATE … SET status='scheduling' WHERE status='queued'` picks the job; candidates are filtered/sorted by rotation strategy; each attempt is recorded in `job_attempts` (provider, key, proxy, status, error).
+2. **submit** - success pins `provider_id`, `key_id`, `remote_id`, sets `running`; increments key usage + `key_usage` table.
+3. **failover** - on 429 (recorded as `quota`), 5xx, or network error: key cools down exponentially; scheduler tries the *next* candidate within the same pass; job stays `queued` until `attempts >= max_retries` → `failed` with `fail_reason`, or all fits were transient (cooldown) → remains `queued`.
+4. **poll** - running jobs are polled every `poll_interval` (5s). Provider state is normalized (`COMPLETED`, `done`, `FINISHED` → `succeeded`, …). On failure/timeout: if attempts remain → requeue with cleared binding (next provider), else terminal `failed|timeout`.
+5. **cost cap** - if `cost_usd_micros > max_cost_usd`, the job is cancelled remotely and failed with `max_cost_usd exceeded`.
+6. **timeout** - `max_duration_seconds` exceeded → remote cancel + same failover logic.
+7. **logs** - full log text stored on the job row; WebSocket `GET /api/v1/jobs/{id}/logs?token=…` streams the buffer live; REST falls back to `GET /api/v1/jobs/{id}`.
 
 ## Providers verification (2026-11)
 
-32 adapters are registered (`internal/providers/registry.go`). **Only providers with a real free tier offering COMPUTE GPUs are enabled by default.** Everything marked "disabled" is seeded but off; flip it in Providers → toggle. Verified notes per provider (public docs/marketing pages as of Nov 2026 — free-tier terms change frequently; **verify before relying on them**):
+32 adapters are registered (`internal/providers/registry.go`). **Only providers with a real free tier offering COMPUTE GPUs are enabled by default.** Everything marked "disabled" is seeded but off; flip it in Providers → toggle. Verified notes per provider (public docs/marketing pages as of Nov 2026 - free-tier terms change frequently; **verify before relying on them**):
 
 | # | Provider | Free GPU tier (as advertised, verified 2026-11) | API class | Status |
 |---|---|---|---|---|
-| 1 | Kaggle Notebooks | ~30 GPU-h/week; **T4 x2 only** (16GB each — P100 retired 2026-09); 12h sessions; phone-verified | Identity REST only; no public job-submit API (NOTE) | enabled* |
+| 1 | Kaggle Notebooks | ~30 GPU-h/week; **T4 x2 only** (16GB each - P100 retired 2026-09); 12h sessions; phone-verified | Identity REST only; no public job-submit API (NOTE) | enabled* |
 | 2 | Google Colab | free T4, ~12h sessions, dynamic limits | none official; unofficial runtime protocol (NOTE) | enabled* |
 | 3 | Lightning AI | ~15 free credits/month (≈75 T4 GPU-h); T4/L4/L40S/A100/H200 by account | Bearer REST (Studios) | enabled |
 | 4 | Paperspace Gradient | Free plan: **M4000 8GB** notebook GPU only (Maxwell) + C4 CPU; 6h auto-shutdown; Pro $8/mo adds P4000/RTX4000/A4000, Growth $39/mo adds A100-80G | REST (x-api-key); legacy API | enabled |
 | 5 | Saturn Cloud | **150 GPU+CPU hours/month** (shared, T4 16GB only); JupyterLab/SSH/Dask; auto-shutdown when idle | Bearer REST | enabled |
-| 6 | SageMaker Studio Lab | **CLOSED to new customers since 2026-07** — replaced by SageMaker Free Tier (250 CPU-h/mo); T4 sessions for legacy accounts | none (UI-only) | disabled — NOTE |
+| 6 | SageMaker Studio Lab | **CLOSED to new customers since 2026-07** - replaced by SageMaker Free Tier (250 CPU-h/mo); T4 sessions for legacy accounts | none (UI-only) | disabled - NOTE |
 | 7 | Paddle AI Studio (Baidu) | V100 16GB activations, ~12h/day cap; Baidu phone account | Bearer REST (`/user/info`); submit UI-only (NOTE) | enabled* |
 | 8 | ModelScope (Alibaba) | 36h one-time NVIDIA A10 24GB (10h/run) + **100h AMD MI300X 192GB** via AMD Developer Program (ROCm) | SDK-token; REST for identity only (NOTE) | enabled* |
 | 9 | Tencent CloudStudio | ~10000 free GPU-minutes/month (T4 16GB, region-dependent); real-name account | token REST (NOTE) | enabled* |
 | 10 | Leafcloud | free research-credit GPU program (T4/L4) | Bearer REST `/instances` | enabled |
 | 11 | Hugging Face Spaces (ZeroGPU) | shared **NVIDIA RTX PRO 6000 Blackwell**, free 5 GPU-min/day (~3 runs); large=48GB (1×quota) / xlarge=96GB (2×quota); 24h reset; Gradio only, 60s/call | Bearer REST `/whoami-v2`; ZeroGPU attach is code-level (NOTE) | enabled* |
-| 12 | Modal | **$30/mo Starter compute credits**; 11 GPU SKUs: T4 16G, L4 24G, A10 24G, L40S 48G, A100 40/80G, RTX PRO 6000 96G, H100 80G, H200 141G, B200 180G, B300 288G | token auth; **no public REST submit** — use `modal run` SDK (NOTE) | enabled* |
+| 12 | Modal | **$30/mo Starter compute credits**; 11 GPU SKUs: T4 16G, L4 24G, A10 24G, L40S 48G, A100 40/80G, RTX PRO 6000 96G, H100 80G, H200 141G, B200 180G, B300 288G | token auth; **no public REST submit** - use `modal run` SDK (NOTE) | enabled* |
 | 13 | Beam | free monthly container allowance, T4/L4 | Bearer REST `/containers` (inferred) | enabled |
 | 14 | Intel Tiber AI Cloud | free Gaudi2 96GB developer program | Bearer REST; OpenShift notebooks (NOTE) | enabled* |
-| 15 | Genesis Cloud | **trial credit only, no permanent free GPU** | REST | disabled — NOTE |
-| 16 | Anyscale | trial credits only (free tier ended) | REST | disabled — NOTE |
+| 15 | Genesis Cloud | **trial credit only, no permanent free GPU** | REST | disabled - NOTE |
+| 16 | Anyscale | trial credits only (free tier ended) | REST | disabled - NOTE |
 | 17 | JarvisLabs | free notebook credits (new accounts) | Bearer REST (inferred) | enabled |
-| 18 | Nebius Cloud | no free GPU quota | REST | disabled — NOTE |
-| 19 | Hyperbolic | one-time trial credits | REST | disabled — NOTE |
-| 20 | Salad Cloud | community-capacity free tier, containers only | Bearer REST | disabled — NOTE |
-| 21 | RunPod | **no permanent free tier** ($1 one-time credit) | GraphQL | disabled — PoC skeleton per spec |
-| 22 | Codesphere | free tier = CPU only | REST | disabled — NOTE |
-| 23 | Replit | free tier = CPU only | REST | disabled — NOTE |
-| 24 | Deepnote | free tier = CPU only | REST | disabled — NOTE |
-| 25 | Hex | free tier = no GPU | REST | disabled — NOTE |
-| 26 | Noteable | free tier = no GPU | REST | disabled — NOTE |
-| 27 | Domino Datalab | trial / OSS-program free, verify | REST | disabled — NOTE |
-| 28 | FloydHub | **service discontinued** | — | disabled — skeleton kept |
-| 29 | Spell.ml | rebranded (Determined/HPE) | — | disabled — NOTE |
-| 30 | Valohai | 10 free compute-hours trial project | Bearer REST | disabled — NOTE |
+| 18 | Nebius Cloud | no free GPU quota | REST | disabled - NOTE |
+| 19 | Hyperbolic | one-time trial credits | REST | disabled - NOTE |
+| 20 | Salad Cloud | community-capacity free tier, containers only | Bearer REST | disabled - NOTE |
+| 21 | RunPod | **no permanent free tier** ($1 one-time credit) | GraphQL | disabled - PoC skeleton per spec |
+| 22 | Codesphere | free tier = CPU only | REST | disabled - NOTE |
+| 23 | Replit | free tier = CPU only | REST | disabled - NOTE |
+| 24 | Deepnote | free tier = CPU only | REST | disabled - NOTE |
+| 25 | Hex | free tier = no GPU | REST | disabled - NOTE |
+| 26 | Noteable | free tier = no GPU | REST | disabled - NOTE |
+| 27 | Domino Datalab | trial / OSS-program free, verify | REST | disabled - NOTE |
+| 28 | FloydHub | **service discontinued** | - | disabled - skeleton kept |
+| 29 | Spell.ml | rebranded (Determined/HPE) | - | disabled - NOTE |
+| 30 | Valohai | 10 free compute-hours trial project | Bearer REST | disabled - NOTE |
 | 31 | Determined AI | OSS, free on your own GPUs | Bearer REST | enabled (self-host) |
 | 32 | ClearML | free hosted orchestration; GPUs must come from your agents | HTTP basic (access/secret) | enabled (self-host GPU) |
-| **33** | **Self-hosted Runner** | **your own machine anywhere** — Kaggle/Colab cell, Modal deploy, own RTX box | Deploy `examples/runner.py` (HTTP + Bearer token) | **enabled** |
+| **33** | **Self-hosted Runner** | **your own machine anywhere** - Kaggle/Colab cell, Modal deploy, own RTX box | Deploy `examples/runner.py` (HTTP + Bearer token) | **enabled** |
 
-`enabled*` = provider is usable for quota/scheduling bookkeeping and key management, but **submit** runs through the provider's own UI/SDK (NOTE) — GPUHub will mark attempts failed with an explicit "submission via API not supported; see README NOTE" and fail over to the next candidate.
+`enabled*` = provider is usable for quota/scheduling bookkeeping and key management, but **submit** runs through the provider's own UI/SDK (NOTE) - GPUHub will mark attempts failed with an explicit "submission via API not supported; see README NOTE" and fail over to the next candidate.
 
-**Not added (research findings):** Together/Fireworks/Groq/Cerebras/SambaNova/Replicate/Baseten/DeepInfra/Novita/Chutes/Cohere/Mistral/Google AI Studio/Cloudflare Workers AI/GitHub Models — inference-only, excluded by scope. Vast.ai, RunPod community (paid), Lambda Labs, AMD Developer Cloud — paid or trial-credit-only. Regular "free Soon™" marketing pages without an actual free GPU SKU were not added. If you find a genuinely free compute-GPU site, here's the 20-line recipe to add it:
+**Not added (research findings):** Together/Fireworks/Groq/Cerebras/SambaNova/Replicate/Baseten/DeepInfra/Novita/Chutes/Cohere/Mistral/Google AI Studio/Cloudflare Workers AI/GitHub Models - inference-only, excluded by scope. Vast.ai, RunPod community (paid), Lambda Labs, AMD Developer Cloud - paid or trial-credit-only. Regular "free Soon™" marketing pages without an actual free GPU SKU were not added. If you find a genuinely free compute-GPU site, here's the 20-line recipe to add it:
 
 ```go
 // internal/providers/adapters4.go
@@ -226,7 +226,7 @@ func init() { registerBuiltin(func() []Provider { return []Provider{NewMyProvide
 // + add row to DefaultDisabled if unsure; + README line; + registry test covers it automatically.
 ```
 
-## Self-hosted Runner — any provider's GPU becomes usable via API (including Kaggle/Colab cells!)
+## Self-hosted Runner - any provider's GPU becomes usable via API (including Kaggle/Colab cells!)
 
 GPUHub ships a **generic runner** (`examples/runner.py`, ~250 lines, **stdlib-only Python**) that bridges GPUHub and ANY environment where you can execute code:
 
@@ -241,11 +241,11 @@ GPUHub ships a **generic runner** (`examples/runner.py`, ~250 lines, **stdlib-on
    !pip install pyngrok && from pyngrok import ngrok; print(ngrok.connect(8787))
    ```
 2. Paste the public URL into **Providers → Self-hosted Runner → Add key** with credential `{"base_url":"https://xxxx.ngrok.io","token":"<your token>"}`. GPU binding = sticky (optional); unbound = direct.
-3. GPUHub schedules work to it like any provider: `gpu_type`, fallback chain, quotas, logs, cancel — all work.
+3. GPUHub schedules work to it like any provider: `gpu_type`, fallback chain, quotas, logs, cancel - all work.
 
-**~9h session wall:** Free providers kill sessions (Kaggle ~12h, Colab ~12h, Studio Lab 4h). GPUHub can't change a provider's limit — but it makes it survivable: set `session_renew: true`, and when the session dies unexpectedly the job is automatically re-queued on the next eligible key; the payload sees `GPUHUB_ATTEMPT=<n>` and `GPUHUB_RESUME=1` — write your trainer to load `checkpoint.pt` when `RESUME=1` (the shipped `examples/runner.py` passes these through; a torch trainer with ~10 lines of save/load logic survives multi-session runs). Kaggle's 30 GPU-hours/week still caps total work — renewal ≠ quota bypass.
+**~9h session wall:** Free providers kill sessions (Kaggle ~12h, Colab ~12h, Studio Lab 4h). GPUHub can't change a provider's limit - but it makes it survivable: set `session_renew: true`, and when the session dies unexpectedly the job is automatically re-queued on the next eligible key; the payload sees `GPUHUB_ATTEMPT=<n>` and `GPUHUB_RESUME=1` - write your trainer to load `checkpoint.pt` when `RESUME=1` (the shipped `examples/runner.py` passes these through; a torch trainer with ~10 lines of save/load logic survives multi-session runs). Kaggle's 30 GPU-hours/week still caps total work - renewal ≠ quota bypass.
 
-**Runner protocol (for anything calling GPUHub):** `GET /health`, `POST /jobs`, `GET /jobs/{id}`, `GET /jobs/{id}/logs`, `POST /jobs/{id}/cancel`, auth `Bearer <token>`. The protocol is deliberately trivial — any language can implement it.
+**Runner protocol (for anything calling GPUHub):** `GET /health`, `POST /jobs`, `GET /jobs/{id}`, `GET /jobs/{id}/logs`, `POST /jobs/{id}/cancel`, auth `Bearer <token>`. The protocol is deliberately trivial - any language can implement it.
 
 ## REST API
 
@@ -282,7 +282,7 @@ Endpoints (selection; see openapi.yaml): `POST /auth/login` · `GET /providers` 
 - **Network:** all outbound calls have hard timeouts, capped retries/cooldowns, and go through key-pinned proxy transports; response bodies are size-capped (32MB).
 - **Injection:** 100% parameterized SQL (database/sql), no string-concatenated values except vetted column names in `handleUpdateKey` (fixed whitelist).
 - **Audit:** every sensitive action (`login`, `key_create/delete/reveal/…`, `proxy_reassign(_force)`, `proxy_delete`, `proxy_health_fail`, `job_submit/failover`, `master_key_rotated`) → `audit_log` (viewable in UI). Notifications → `notifications` table + optional `GPUHUB_NOTIFY_WEBHOOK_URL`.
-- **Least privilege by role:** admin-only — delete key/proxy, reassign proxy, force-detach, settings edit, master-key rotation, credential reveal. Everyone else: full read + job submit/cancel + key metadata edits.
+- **Least privilege by role:** admin-only - delete key/proxy, reassign proxy, force-detach, settings edit, master-key rotation, credential reveal. Everyone else: full read + job submit/cancel + key metadata edits.
 - No real secret is committed: `.env.example` holds placeholders; real `.env` is git-ignored.
 - Proxy health check endpoint defaults to ipify; override via `GPUHUB_PROXY_HEALTH_URL`.
 
@@ -290,7 +290,7 @@ Endpoints (selection; see openapi.yaml): `POST /auth/login` · `GET /providers` 
 
 `.env` (or env) beats `config.yaml`. Keys: `GPUHUB_PORT`, `GPUHUB_DB_PATH`, `GPUHUB_MASTER_KEY` (**required**), `GPUHUB_JWT_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD` (first-boot only), `GPUHUB_SCHEDULER_STRATEGY`, `GPUHUB_ROTATION_STRATEGY` (`round_robin|least_used|most_quota|weighted`), `GPUHUB_MAX_RETRIES`, `GPUHUB_QUOTA_HIGH_WATERMARK`, `GPUHUB_PROXY_HEALTH_URL`, `GPUHUB_NOTIFY_WEBHOOK_URL` (for Slack/generic: plain JSON POST; **for discord.com webhooks: automatic colored embed** with username "GPUHub"; `POST /settings/test-webhook` sends a test ping), `GPUHUB_DEV=1` (ephemeral insecure key, dev only).
 
-Migrations (embedded, applied at boot, idempotent): `internal/db/migrations/` — 0001 initial schema, 0002 `jobs.gpu_fallback`, 0003 `jobs.session_renew`, tracked in `schema_migrations`. Apply manually: `go run ./cmd/gpuhub --migrate-only` (or `make migrate`).
+Migrations (embedded, applied at boot, idempotent): `internal/db/migrations/` - 0001 initial schema, 0002 `jobs.gpu_fallback`, 0003 `jobs.session_renew`, tracked in `schema_migrations`. Apply manually: `go run ./cmd/gpuhub --migrate-only` (or `make migrate`).
 
 ## Tests
 
@@ -313,13 +313,13 @@ For bare metal: `cd web && npm ci && npm run build && cd .. && go build -o bin/g
 
 ## Known limitations & roadmap
 
-- Free-tier terms change often; several adapters (Kaggle/Colab/Studio Lab/ModelScope/Modal/ZeroGPU) **have no public job-submit HTTP API** — GPUHub schedules and enforces quota/failover honestly, but actual run submission for those providers goes through our **Self-hosted Runner** (deploy `examples/runner.py` inside the environment and GPUHub drives it over HTTP) or the provider's own UI/SDK (attempts are marked failed-by-design with explicit messages, and other candidates are tried).
+- Free-tier terms change often; several adapters (Kaggle/Colab/Studio Lab/ModelScope/Modal/ZeroGPU) **have no public job-submit HTTP API** - GPUHub schedules and enforces quota/failover honestly, but actual run submission for those providers goes through our **Self-hosted Runner** (deploy `examples/runner.py` inside the environment and GPUHub drives it over HTTP) or the provider's own UI/SDK (attempts are marked failed-by-design with explicit messages, and other candidates are tried).
 - Provider QUOTA endpoints: many providers don't expose remaining free quota; GPUHub meters local usage (`key_usage`, per-day/week counters) and only consumes provider-reported quota when available.
 - Live log streaming is poll-based over WebSocket (no provider websockets), 1s cadence; logs are also persisted on the job row.
-- The ~9–12h session wall of free providers (Kaggle ~12h, Colab ~12h, Studio Lab 4h) cannot be removed — `session_renew` + checkpoint/resume makes long runs survive, it does not extend quotas.
+- The ~9–12h session wall of free providers (Kaggle ~12h, Colab ~12h, Studio Lab 4h) cannot be removed - `session_renew` + checkpoint/resume makes long runs survive, it does not extend quotas.
 - SQLite WAL + `busy_timeout(5000)`; single-writer workload fits free-tier GPU concurrency easily.
 - Notifications: Discord auto-detects colored embeds; generic/Slack get plain JSON. Email templating not implemented.
-- UI: English + Turkish (top-right switcher); light + dark themes (top bar toggle). Jobs are created via code/API (the UI no longer has a job creation form — monitoring lives on the Dashboard).
+- UI: English + Turkish (top-right switcher); light + dark themes (top bar toggle). Jobs are created via code/API (the UI no longer has a job creation form - monitoring lives on the Dashboard).
 - Roadmap: Postgres option, per-key spend forecasts, `unschedulable` wait-notify, multi-runner load balancing for the Runner provider, Helm chart.
 
 ## CI (GitHub Actions � GHCR)

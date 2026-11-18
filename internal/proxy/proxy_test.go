@@ -98,7 +98,7 @@ func TestStickyTransport_100CallsSameProxy(t *testing.T) {
 		t.Fatal(err)
 	}
 	if tr1 != tr2 {
-		t.Fatal("transport cache not reused — connection pool would be rebuilt per call")
+		t.Fatal("transport cache not reused - connection pool would be rebuilt per call")
 	}
 
 	// Manual reassign (simulates admin PATCH /keys/{id}/proxy + InvalidateTransport).
@@ -115,7 +115,7 @@ func TestStickyTransport_100CallsSameProxy(t *testing.T) {
 	}
 }
 
-// When a proxy fails health checks, bound keys are deactivated — never auto-rebound.
+// When a proxy fails health checks, bound keys are deactivated - never auto-rebound.
 func TestHealthCheckFailure_DisablesKeyNoRebind(t *testing.T) {
 	conn, box := setup(t)
 
@@ -148,10 +148,10 @@ func TestHealthCheckFailure_DisablesKeyNoRebind(t *testing.T) {
 		t.Fatal("key bound to unhealthy proxy should be deactivated")
 	}
 	if !proxyID.Valid || proxyID.Int64 != badProxy {
-		t.Fatal("key must stay bound to the unhealthy proxy — no automatic rebinding allowed")
+		t.Fatal("key must stay bound to the unhealthy proxy - no automatic rebinding allowed")
 	}
 	if proxyID.Int64 == healthyProxy {
-		t.Fatal("key was rebound to another proxy — sticky binding violated")
+		t.Fatal("key was rebound to another proxy - sticky binding violated")
 	}
 	if len(notifications) == 0 {
 		t.Fatal("admin must be notified about the deactivation")
@@ -195,7 +195,7 @@ func TestProxyDeleteLogicSimulation(t *testing.T) {
 		t.Fatal("key must be disabled after its proxy is deleted")
 	}
 	if proxyID.Valid {
-		t.Fatal("proxy binding must be NULL after deletion — never auto-rebound")
+		t.Fatal("proxy binding must be NULL after deletion - never auto-rebound")
 	}
 }
 

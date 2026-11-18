@@ -157,7 +157,7 @@ export default function Providers() {
       .addProviderKey(keyModalFor.id, {
         label: label.trim() || undefined,
         credential: credential.trim(),
-        // Empty selection = no proxy (direct egress) — sticky binding is optional.
+        // Empty selection = no proxy (direct egress) - sticky binding is optional.
         bound_proxy_id: boundProxyId ? Number(boundProxyId) : undefined,
         daily_quota: dailyQuota.trim() ? Number(dailyQuota) : undefined,
         weekly_quota: weeklyQuota.trim() ? Number(weeklyQuota) : undefined,
@@ -177,11 +177,14 @@ export default function Providers() {
 
   const credentialHint = keyModalFor?.id === 'runner'
     ? L(lang, {
-        en: 'Self-hosted Runner credential: {"base_url":"https://xxxx.ngrok.app","token":"…"} — start examples/runner.py in any GPU environment.',
-        tr: 'Self-hosted Runner credential: {"base_url":"https://xxxx.ngrok.app","token":"…"} — örnek examples/runner.py dosyasını herhangi bir GPU ortamında başlatın.',
+        en: 'Self-hosted Runner credential: {"base_url":"https://xxxx.ngrok.app","token":"…"} - start examples/runner.py in any GPU environment.',
+        tr: 'Self-hosted Runner credential: {"base_url":"https://xxxx.ngrok.app","token":"…"} - örnek examples/runner.py dosyasını herhangi bir GPU ortamında başlatın.',
       })
     : keyModalFor?.id === 'kaggle'
-      ? L(lang, { en: 'kaggle.json contents: {"username":"…","key":"…"}', tr: 'kaggle.json içeriği: {"username":"…","key":"…"}' })
+      ? L(lang, {
+          en: 'Kaggle API token: {"token":"KGAT_…"} (recommended — works with Bearer) or legacy kaggle.json {"username":"…","key":"…"}',
+          tr: 'Kaggle API token\'ı: {"token":"KGAT_…"} (önerilen, Bearer ile çalışır) veya klasik kaggle.json {"username":"…","key":"…"}',
+        })
       : L(lang, { en: 'Token or JSON credential (see README for this provider).', tr: 'Token veya JSON credential (sağlayıcıya göre README\'ye bakın).' });
 
   return (
@@ -279,7 +282,7 @@ export default function Providers() {
       <Modal
         open={!!keyModalFor}
         onClose={() => setKeyModalFor(null)}
-        title={keyModalFor ? L(lang, { en: `Add key — ${keyModalFor.name}`, tr: `Anahtar ekle — ${keyModalFor.name}` }) : ''}
+        title={keyModalFor ? L(lang, { en: `Add key - ${keyModalFor.name}`, tr: `Anahtar ekle - ${keyModalFor.name}` }) : ''}
         wide
         footer={
           <>
@@ -304,20 +307,20 @@ export default function Providers() {
           </div>
           <div>
             <Label htmlFor="key-proxy">
-              {L(lang, { en: 'Bound proxy (optional — leave empty for direct egress)', tr: 'Bağlı proxy (opsiyonel — boş bırakırsanız direkt bağlantı)' })}
+              {L(lang, { en: 'Bound proxy (optional - leave empty for direct egress)', tr: 'Bağlı proxy (opsiyonel - boş bırakırsanız direkt bağlantı)' })}
             </Label>
             <Select id="key-proxy" value={boundProxyId} onChange={(e) => setBoundProxyId(e.target.value)} disabled={submitting}>
-              <option value="">{L(lang, { en: '— Direct (no proxy)', tr: '— Direkt (proxy yok)' })}</option>
+              <option value="">{L(lang, { en: '- Direct (no proxy)', tr: '- Direkt (proxy yok)' })}</option>
               {proxies.map((px) => (
                 <option key={px.id} value={px.id}>
-                  #{px.id} — {px.label} ({px.health_status ?? 'unknown'})
+                  #{px.id} - {px.label} ({px.health_status ?? 'unknown'})
                 </option>
               ))}
             </Select>
             <p className="mt-1.5 text-[11px] text-amber-500/90">
               {L(lang, {
-                en: 'A bound proxy is pinned permanently (sticky 1:1) — it never rotates; your code calls go out via the same account IP forever. Choose direct for no proxy at all.',
-                tr: 'Bağlanan proxy kalıcı olarak (sticky 1:1) sabitlenir — asla rotate edilmez; çağrılarınız hep aynı IP\'den çıkar. Hiç proxy istemiyorsanız direkt bırakın.',
+                en: 'A bound proxy is pinned permanently (sticky 1:1) - it never rotates; your code calls go out via the same account IP forever. Choose direct for no proxy at all.',
+                tr: 'Bağlanan proxy kalıcı olarak (sticky 1:1) sabitlenir - asla rotate edilmez; çağrılarınız hep aynı IP\'den çıkar. Hiç proxy istemiyorsanız direkt bırakın.',
               })}
             </p>
           </div>
@@ -349,7 +352,7 @@ export default function Providers() {
       <Modal
         open={!!quotaFor}
         onClose={() => setQuotaFor(null)}
-        title={quotaFor ? L(lang, { en: `Quota — ${quotaFor.name}`, tr: `Kota — ${quotaFor.name}` }) : ''}
+        title={quotaFor ? L(lang, { en: `Quota - ${quotaFor.name}`, tr: `Kota - ${quotaFor.name}` }) : ''}
         footer={<Button variant="ghost" onClick={() => setQuotaFor(null)}>{L(lang, { en: 'Close', tr: 'Kapat' })}</Button>}
       >
         {quotaLoading ? (

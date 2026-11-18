@@ -210,7 +210,7 @@ export default function Keys() {
               {L(lang, { en: 'Key rotation', tr: 'Anahtar rotation’ı' })}
             </div>
             <div className="mt-1">
-              <Badge variant="accent">{settings?.rotation_strategy ?? '—'}</Badge>
+              <Badge variant="accent">{settings?.rotation_strategy ?? '-'}</Badge>
             </div>
           </div>
           <div>
@@ -218,7 +218,7 @@ export default function Keys() {
               {L(lang, { en: 'Scheduler', tr: 'Scheduler' })}
             </div>
             <div className="mt-1">
-              <Badge variant="info">{settings?.scheduler_strategy ?? '—'}</Badge>
+              <Badge variant="info">{settings?.scheduler_strategy ?? '-'}</Badge>
             </div>
           </div>
           <p className="max-w-md text-[11px] leading-relaxed text-zinc-500">
@@ -283,7 +283,7 @@ export default function Keys() {
                   <Td className="text-xs text-zinc-300">
                     <span className="flex items-center gap-2">
                       <ProviderIcon id={k.provider_id ?? ''} size={14} />
-                      {k.provider_name ?? k.provider ?? k.provider_id ?? '—'}
+                      {k.provider_name ?? k.provider ?? k.provider_id ?? '-'}
                     </span>
                   </Td>
                   <Td>
@@ -298,10 +298,10 @@ export default function Keys() {
                       </Badge>
                     )}
                   </Td>
-                  <Td className="tabular-nums text-xs text-zinc-400">{k.priority ?? '—'}</Td>
+                  <Td className="tabular-nums text-xs text-zinc-400">{k.priority ?? '-'}</Td>
                   <Td className="min-w-[110px]"><QuotaCell used={k.usage_today} quota={k.daily_quota} /></Td>
                   <Td className="min-w-[110px]"><QuotaCell used={k.usage_week} quota={k.weekly_quota} /></Td>
-                  <Td className="text-[11px] text-zinc-500">{k.last_used_at ? fmtDateTime(k.last_used_at) : '—'}</Td>
+                  <Td className="text-[11px] text-zinc-500">{k.last_used_at ? fmtDateTime(k.last_used_at) : '-'}</Td>
                   <Td>
                     {errors > 0 ? (
                       <span className="font-mono text-xs font-semibold text-red-400">{errors}</span>
@@ -315,7 +315,7 @@ export default function Keys() {
                         {fmtDateTime(cooldown)}
                       </span>
                     ) : (
-                      <span className="text-zinc-600">—</span>
+                      <span className="text-zinc-600">-</span>
                     )}
                   </Td>
                   <Td>
@@ -381,8 +381,8 @@ export default function Keys() {
               <AlertTriangle size={15} className="mt-0.5 shrink-0" />
               <span>
                 {L(lang, {
-                  en: 'Sticky binding: a bound proxy never rotates automatically — the key egresses through it forever until an admin changes it. Unbind to switch the key to direct egress.',
-                  tr: 'Sticky binding: bağlanan proxy asla otomatik rotate edilmez — anahtar sonsuza kadar aynı IP\'den çıkar, admin değiştirene kadar. Direkt çıkış istiyorsanız bağ kaldırın.',
+                  en: 'Sticky binding: a bound proxy never rotates automatically - the key egresses through it forever until an admin changes it. Unbind to switch the key to direct egress.',
+                  tr: 'Sticky binding: bağlanan proxy asla otomatik rotate edilmez - anahtar sonsuza kadar aynı IP\'den çıkar, admin değiştirene kadar. Direkt çıkış istiyorsanız bağ kaldırın.',
                 })}
               </span>
             </div>
@@ -390,11 +390,11 @@ export default function Keys() {
               <Label htmlFor="reassign-proxy">{L(lang, { en: 'Proxy', tr: 'Proxy' })}</Label>
               <Select id="reassign-proxy" value={reassignProxyId} onChange={(e) => setReassignProxyId(e.target.value)} disabled={reassigning}>
                 <option value="">
-                  {L(lang, { en: '— Direct (unbind, no proxy)', tr: '— Direkt (bağ kaldır, proxy yok)' })}
+                  {L(lang, { en: '- Direct (unbind, no proxy)', tr: '- Direkt (bağ kaldır, proxy yok)' })}
                 </option>
                 {proxies.map((p) => (
                   <option key={p.id} value={p.id}>
-                    #{p.id} — {p.label} {p.country ? `(${p.country})` : ''}
+                    #{p.id} - {p.label} {p.country ? `(${p.country})` : ''}
                   </option>
                 ))}
               </Select>

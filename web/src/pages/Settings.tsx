@@ -23,29 +23,29 @@ const ROTATION_OPTIONS: RotationOption[] = [
     value: 'round_robin',
     enTitle: 'Round robin',
     trTitle: 'Round robin',
-    enDesc: 'Alternates keys evenly. Simple and fair — good for spreading identical load across many accounts.',
-    trDesc: 'Anahtarları eşit sırayla kullanır. Basit ve adil — aynı yükü birden çok hesaba yaymak için ideal.',
+    enDesc: 'Alternates keys evenly. Simple and fair - good for spreading identical load across many accounts.',
+    trDesc: 'Anahtarları eşit sırayla kullanır. Basit ve adil - aynı yükü birden çok hesaba yaymak için ideal.',
   },
   {
     value: 'least_used',
     enTitle: 'Least used',
     trTitle: 'En az kullanılan',
-    enDesc: 'Always picks the key with the fewest runs this month — keeps every free tier warming evenly.',
-    trDesc: 'Her zaman bu ay en az kullanılmış olanı seçer — tüm ücretsiz katmanları eşit kullanır.',
+    enDesc: 'Always picks the key with the fewest runs this month - keeps every free tier warming evenly.',
+    trDesc: 'Her zaman bu ay en az kullanılmış olanı seçer - tüm ücretsiz katmanları eşit kullanır.',
   },
   {
     value: 'most_quota',
     enTitle: 'Most quota',
     trTitle: 'En çok kotası kalan',
-    enDesc: 'Picks the key with the most remaining daily/weekly allowance. Best overall throughput — recommended.',
-    trDesc: 'Kalan günlük/haftalık hakkı en yüksek olanı seçer. En yüksek toplam verim — önerilir.',
+    enDesc: 'Picks the key with the most remaining daily/weekly allowance. Best overall throughput - recommended.',
+    trDesc: 'Kalan günlük/haftalık hakkı en yüksek olanı seçer. En yüksek toplam verim - önerilir.',
   },
   {
     value: 'weighted',
     enTitle: 'Weighted',
     trTitle: 'Ağırlıklı',
-    enDesc: 'Probability proportional to each key’s weight field — great when one account has 10× the quota of another.',
-    trDesc: 'Her anahtarın weight değerine göre olasılık verir — bir hesap diğerinin 10 katı kotaya sahipse ideal.',
+    enDesc: 'Probability proportional to each key’s weight field - great when one account has 10× the quota of another.',
+    trDesc: 'Her anahtarın weight değerine göre olasılık verir - bir hesap diğerinin 10 katı kotaya sahipse ideal.',
   },
 ];
 
@@ -138,7 +138,7 @@ export default function Settings() {
     setTestingWebhook(true);
     try {
       await api.testWebhook(webhookUrl.trim() || undefined);
-      toast(L(lang, { en: 'Test webhook sent — check your channel', tr: 'Test webhook gönderildi — kanalınızı kontrol edin' }), 'success');
+      toast(L(lang, { en: 'Test webhook sent - check your channel', tr: 'Test webhook gönderildi - kanalınızı kontrol edin' }), 'success');
     } catch (e) {
       toast(errorMessage(e, L(lang, { en: 'Webhook test failed', tr: 'Webhook testi başarısız' })), 'error');
     } finally {
@@ -162,8 +162,8 @@ export default function Settings() {
     try {
       const res = await api.rotateMasterKey(currentMasterKey.trim(), newMasterKey.trim());
       setRotateResult({ ok: true, message: L(lang, {
-        en: `${resultSummary(res)} — now set GPUHUB_MASTER_KEY=<new> in .env and restart GPUHub.`,
-        tr: `${resultSummary(res)} — ardından GPUHUB_MASTER_KEY=<yeni> değerini .env’e yazıp GPUHub’ı yeniden başlatın.`,
+        en: `${resultSummary(res)} - now set GPUHUB_MASTER_KEY=<new> in .env and restart GPUHub.`,
+        tr: `${resultSummary(res)} - ardından GPUHUB_MASTER_KEY=<yeni> değerini .env’e yazıp GPUHub’ı yeniden başlatın.`,
       }) });
       setCurrentMasterKey('');
       setNewMasterKey('');
@@ -229,7 +229,7 @@ export default function Settings() {
                 )}
                 <div className="mt-2 space-y-1.5 text-[11px] text-zinc-500">
                   <p className="flex items-start gap-1.5"><Info size={12} className="mt-0.5 shrink-0" />
-                    {L(lang, { en: 'Rotation picks WHICH key handles the request — proxies never rotate.', tr: 'Rotation HANGİ anahtarın kullanılacağına karar verir — proxy asla rotate edilmez.' })}</p>
+                    {L(lang, { en: 'Rotation picks WHICH key handles the request - proxies never rotate.', tr: 'Rotation HANGİ anahtarın kullanılacağına karar verir - proxy asla rotate edilmez.' })}</p>
                   <p className="flex items-start gap-1.5"><Info size={12} className="mt-0.5 shrink-0" />
                     {L(lang, { en: 'Keys are tried in priority order first, then by this strategy.', tr: 'Anahtarlar önce priority sırasına, sonra bu stratejiye göre denenir.' })}</p>
                 </div>
@@ -363,8 +363,8 @@ export default function Settings() {
             <div className="mb-4 flex items-start gap-2.5 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2.5 text-[11px] leading-relaxed text-amber-300">
               <AlertTriangle size={14} className="mt-0.5 shrink-0" />
               {L(lang, {
-                en: 'Destructive if mishandled: after rotation you must set GPUHUB_MASTER_KEY to the new value and restart — otherwise nothing decrypts. Back up first.',
-                tr: 'Yanlış kullanılırsa yıkıcıdır: rotasyondan sonra GPUHUB_MASTER_KEY’i yeni değerle değiştirip yeniden başlatmanız gerekir — yoksa hiçbir şey çözülemez. Önce yedekleyin.',
+                en: 'Destructive if mishandled: after rotation you must set GPUHUB_MASTER_KEY to the new value and restart - otherwise nothing decrypts. Back up first.',
+                tr: 'Yanlış kullanılırsa yıkıcıdır: rotasyondan sonra GPUHUB_MASTER_KEY’i yeni değerle değiştirip yeniden başlatmanız gerekir - yoksa hiçbir şey çözülemez. Önce yedekleyin.',
               })}
             </div>
             <form onSubmit={submitRotate} className="space-y-4">

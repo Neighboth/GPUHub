@@ -14,8 +14,8 @@ var GPUCatalog = map[string]int{
 	"L40S":       48,
 	"RTX4090":    24,
 	"RTX6000Ada": 48,
-	"RTX6000Pro": 96, // RTX PRO 6000 Blackwell — HF ZeroGPU backing hardware (48GB large / 96GB xlarge)
-	"M4000":      8,  // legacy Maxwell — Paperspace/Saturn free class
+	"RTX6000Pro": 96, // RTX PRO 6000 Blackwell - HF ZeroGPU backing hardware (48GB large / 96GB xlarge)
+	"M4000":      8,  // legacy Maxwell - Paperspace/Saturn free class
 	"P4000":      8,
 	"MI300X":     192,
 	"B200":       180,

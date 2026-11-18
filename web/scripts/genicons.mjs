@@ -50,7 +50,7 @@ for (const [id, slug] of Object.entries(MAP)) {
   out[id] = { title: icon.title, hex: icon.hex, path: m[1] };
 }
 
-const body = `// AUTO-GENERATED from simple-icons (CC0) — do not edit by hand. Re-run scripts/genicons.mjs.
+const body = `// AUTO-GENERATED from simple-icons (CC0) - do not edit by hand. Re-run scripts/genicons.mjs.
 export interface SimpleIcon { title: string; hex: string; path: string }
 export const PROVIDER_ICONS: Record<string, SimpleIcon> = ${JSON.stringify(out, null, 1)};
 `;

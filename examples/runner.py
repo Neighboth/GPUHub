@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-GPUHub Self-hosted Runner — deploy this inside ANY environment that gives you a GPU:
+GPUHub Self-hosted Runner - deploy this inside ANY environment that gives you a GPU:
   • a Kaggle / Colab notebook cell (paste it and run)
   • a Modal container (@app.function(gpu="T4"))
   • a Lightning studio / Saturn / Paperspace notebook
@@ -24,7 +24,7 @@ Usage:
   # expose it:  ngrok http 8787   (or cloudflared tunnel --url http://localhost:8787)
   # GPUHub → Providers → Add key on "Self-hosted Runner":
   #   credential = {"base_url":"https://xxxx.ngrok.io","token":"<GPUHUB_RUNNER_TOKEN>"}
-  #   (proxy binding is OPTIONAL now — bind one for sticky egress, or leave direct)
+  #   (proxy binding is OPTIONAL now - bind one for sticky egress, or leave direct)
 
 Env vars:
   GPUHUB_RUNNER_TOKEN   bearer token GPUHub sends (required)
@@ -282,7 +282,7 @@ def main():
     if not TOKEN:
         print("GPUHUB_RUNNER_TOKEN is required (openssl rand -hex 24)", file=sys.stderr)
         sys.exit(1)
-    print(f"GPUHub runner on {args.host}:{args.port} — gpus: {detect_gpus()}", flush=True)
+    print(f"GPUHub runner on {args.host}:{args.port} - gpus: {detect_gpus()}", flush=True)
     srv = ThreadingHTTPServer((args.host, args.port), Handler)
     try:
         srv.serve_forever()

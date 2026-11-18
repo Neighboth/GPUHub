@@ -111,7 +111,7 @@ export default function Proxies() {
       if (disabled) {
         toast(
           disabled === -1
-            ? `Proxy “${target.label}” deleted. Its bound keys were disabled — re-bind them to a proxy.`
+            ? `Proxy “${target.label}” deleted. Its bound keys were disabled - re-bind them to a proxy.`
             : `Proxy “${target.label}” deleted. ${disabled} bound key(s) were disabled.`,
           'warning',
         );
@@ -180,7 +180,7 @@ export default function Proxies() {
         <EmptyState
           icon={Network}
           title="No proxies yet"
-          subtitle="Add an egress proxy. API keys can then be permanently bound to it — optional; without one the key connects directly."
+          subtitle="Add an egress proxy. API keys can then be permanently bound to it - optional; without one the key connects directly."
           action={
             <Button size="sm" variant="primary" onClick={() => setAddOpen(true)}>
               <Plus size={14} /> Add your first proxy
@@ -219,7 +219,7 @@ export default function Proxies() {
                         <Globe2 size={12} className="text-zinc-500" /> {p.country}
                       </span>
                     ) : (
-                      <span className="text-zinc-600">—</span>
+                      <span className="text-zinc-600">-</span>
                     )}
                   </Td>
                   <Td>
@@ -238,7 +238,7 @@ export default function Proxies() {
                         {bound.provider && <span className="text-zinc-500">· {bound.provider}</span>}
                       </span>
                     ) : (
-                      <span className="text-zinc-600">—</span>
+                      <span className="text-zinc-600">-</span>
                     )}
                   </Td>
                   <Td>

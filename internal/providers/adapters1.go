@@ -34,7 +34,7 @@ func NewKaggle() *apiAdapter {
 		caps: Capabilities{GPUs: []GPU{gpu("T4", 16, 2)}, MaxDurationHours: 12,
 			Frameworks: []string{"pytorch", "tensorflow", "jax"}, Notebooks: true, Docker: false, SSH: false,
 			FreeTierNotes: "30 GPU-hours/week (floating; T4 x2 16GB — only GPU, P100 retired 2026-09); phone-verified; 12h max session; /kaggle/working persists 20GB"},
-		auth:     basicAuth,
+		auth:     kaggleAuth,
 		validate: "/competitions/list?page=1",
 		quota:    "", // not exposed — tracked locally by GPUHub (key_usage)
 		submit:   "", // NOTE: Kaggle has no public job-submission API; submit via UI. Sessions are notebook-only.

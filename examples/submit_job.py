@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-GPUHub job submission example — submit from your own Python code.
+GPUHub job submission example - submit from your own Python code.
 
 Shows:
   1. Exact GPU request (T4 + 16GB + 2 GPUs)
@@ -30,7 +30,7 @@ PASSWORD = os.environ.get("GPUHUB_PASSWORD", "admin")
 
 HEADERS = {
     "Content-Type": "application/json",
-    "X-Requested-With": "XMLHttpRequest",  # CSRF protection — mandatory on mutations
+    "X-Requested-With": "XMLHttpRequest",  # CSRF protection - mandatory on mutations
 }
 
 def login() -> str:
@@ -56,7 +56,7 @@ if __name__ == "__main__":
            payload="print('gpuhub ok')",
            gpu_type="T4", min_vram_gb=16, gpu_count=1)
 
-    # 2) GPU fallback chain — tries A100 first, then H100, then L40S, then T4
+    # 2) GPU fallback chain - tries A100 first, then H100, then L40S, then T4
     submit(tok, type="script",
            payload="print('fallback chain')",
            gpu_type="A100",

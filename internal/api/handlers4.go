@@ -44,7 +44,7 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !providers.GPUTypeValid(req.GPUType) {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown gpu_type %q — known: %s", req.GPUType, strings.Join(providers.KnownGPUTypes(), ", ")))
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown gpu_type %q - known: %s", req.GPUType, strings.Join(providers.KnownGPUTypes(), ", ")))
 		return
 	}
 	for _, fb := range req.GPUTypeFallback {

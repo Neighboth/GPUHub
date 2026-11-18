@@ -32,12 +32,12 @@ func (s *Server) handleTestWebhook(w http.ResponseWriter, r *http.Request) {
 		url = s.cfg.NotifyWebhookURL
 	}
 	if url == "" {
-		writeError(w, http.StatusBadRequest, "no webhook configured — set one first or pass {\"url\": \"...\"}")
+		writeError(w, http.StatusBadRequest, "no webhook configured - set one first or pass {\"url\": \"...\"}")
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 	defer cancel()
-	if err := notify.SendWebhook(ctx, url, "info", "GPUHub test notification — webhook is wired up correctly."); err != nil {
+	if err := notify.SendWebhook(ctx, url, "info", "GPUHub test notification - webhook is wired up correctly."); err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
@@ -233,7 +233,7 @@ func (s *Server) handleDeleteProxy(w http.ResponseWriter, r *http.Request) {
 	for _, a := range affected {
 		id, _ := parseID(a[0])
 		s.proxies.InvalidateTransport(id)
-		s.notify(r.Context(), "critical", fmt.Sprintf("Proxy #%d (%s) was deleted. Key %q (id=%s) lost its sticky proxy binding and was DISABLED. It was NOT rebound automatically — assign a proxy via PATCH /api/v1/keys/%s/proxy.", proxyID, label, a[1], a[0], a[0]))
+		s.notify(r.Context(), "critical", fmt.Sprintf("Proxy #%d (%s) was deleted. Key %q (id=%s) lost its sticky proxy binding and was DISABLED. It was NOT rebound automatically - assign a proxy via PATCH /api/v1/keys/%s/proxy.", proxyID, label, a[1], a[0], a[0]))
 	}
 	audit.Log(r.Context(), s.db, userFrom(r.Context()).Username, "proxy_delete",
 		fmt.Sprintf("proxy_id=%d label=%s disabled_keys=%v", proxyID, label, affected))

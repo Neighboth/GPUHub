@@ -148,7 +148,7 @@ func (a *apiAdapter) ListGPUs(ctx context.Context, cred Credential, proxyURL str
 				return gpus, nil
 			}
 		}
-		// Fall through to declared capabilities — many free tiers report no live inventory.
+		// Fall through to declared capabilities - many free tiers report no live inventory.
 	}
 	return a.caps.GPUs, nil
 }
@@ -382,6 +382,18 @@ func normalizeState(s string) string {
 func bearer(p CredentialPayload) (string, string) { return "Authorization", "Bearer " + firstToken(p) }
 func tokenHeader(header string) func(CredentialPayload) (string, string) {
 	return func(p CredentialPayload) (string, string) { return header, firstToken(p) }
+}
+
+// kaggleAuth: KGAT_ tokens are used as Bearer, legacy kaggle.json uses Basic auth.
+func kaggleAuth(p CredentialPayload) (string, string) {
+	token := firstToken(p)
+	if strings.HasPrefix(token, "KGAT_") {
+		return "Authorization", "Bearer " + token
+	}
+	if p.Username != "" && p.Key != "" {
+		return "Authorization", "Basic " + basicEncode(p.Username, p.Key)
+	}
+	return "Authorization", "Bearer " + token
 }
 func basicAuth(p CredentialPayload) (string, string) {
 	return "Authorization", "Basic " + basicEncode(p.Username, p.Key)

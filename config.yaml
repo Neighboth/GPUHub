@@ -1,4 +1,4 @@
-# GPUHub — optional non-sensitive defaults. Environment variables override these.
+# GPUHub - optional non-sensitive defaults. Environment variables override these.
 port: 8080
 data_dir: /data
 database_path: /data/gpuhub.db

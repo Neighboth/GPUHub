@@ -23,7 +23,7 @@ func truncateStr(s string, n int) string {
 	return s
 }
 
-// Proxy URLs may contain user:pass — they are stored encrypted ("enc:" prefix).
+// Proxy URLs may contain user:pass - they are stored encrypted ("enc:" prefix).
 func (s *Server) storeProxyURL(raw string) (string, error) {
 	enc, err := s.box.Encrypt(raw)
 	if err != nil {
@@ -255,7 +255,7 @@ func (s *Server) handleReassignProxy(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		newProxyLabel = "(direct — no proxy)"
+		newProxyLabel = "(direct - no proxy)"
 	}
 	var boundKeyID sql.NullInt64
 	var boundKeyLabel string
@@ -290,8 +290,8 @@ func (s *Server) handleReassignProxy(w http.ResponseWriter, r *http.Request) {
 		}
 		s.proxies.InvalidateTransport(keyID)
 		audit.Log(r.Context(), s.db, username, "proxy_unbind",
-			fmt.Sprintf("key_id=%d key=%q from_proxy=%q — key now uses direct egress", keyID, keyLabel, oldProxyLabel))
-		s.notify(r.Context(), "info", fmt.Sprintf("Key %q (id=%d) was unbound from proxy %q by %s — now uses direct egress.", keyLabel, keyID, oldProxyLabel, username))
+			fmt.Sprintf("key_id=%d key=%q from_proxy=%q - key now uses direct egress", keyID, keyLabel, oldProxyLabel))
+		s.notify(r.Context(), "info", fmt.Sprintf("Key %q (id=%d) was unbound from proxy %q by %s - now uses direct egress.", keyLabel, keyID, oldProxyLabel, username))
 		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "key_id": keyID, "proxy_id": 0, "direct": true})
 		return
 	}
@@ -310,7 +310,7 @@ func (s *Server) handleReassignProxy(w http.ResponseWriter, r *http.Request) {
 	if boundKeyID.Valid {
 		s.proxies.InvalidateTransport(boundKeyID.Int64)
 		if stolen {
-			s.notify(r.Context(), "warn", fmt.Sprintf("Proxy #%d forcibly reassigned from key %q (id=%d) to key %q (id=%d) by %s. Previous key disabled — manual reassignment required.",
+			s.notify(r.Context(), "warn", fmt.Sprintf("Proxy #%d forcibly reassigned from key %q (id=%d) to key %q (id=%d) by %s. Previous key disabled - manual reassignment required.",
 				req.ProxyID, boundKeyLabel, boundKeyID.Int64, keyLabel, keyID, username))
 			audit.Log(r.Context(), s.db, username, "proxy_reassign_force",
 				fmt.Sprintf("proxy_id=%d from_key_id=%d from_key=%q to_key_id=%d to_key=%q", req.ProxyID, boundKeyID.Int64, boundKeyLabel, keyID, keyLabel))

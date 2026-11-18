@@ -57,7 +57,7 @@ func levelEmoji(level string) string {
 func buildPayload(webhookURL, level, msg string) []byte {
 	if isDiscordWebhook(webhookURL) {
 		embed := discordEmbed{
-			Title:       levelEmoji(level) + " GPUHub — " + strings.ToUpper(level),
+			Title:       levelEmoji(level) + " GPUHub - " + strings.ToUpper(level),
 			Description: msg,
 			Color:       levelColor(level),
 		}

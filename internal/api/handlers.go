@@ -274,7 +274,7 @@ func (s *Server) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "credential is required")
 		return
 	}
-	// Bound proxy is OPTIONAL — keys without a proxy use direct egress (no sticky binding).
+	// Bound proxy is OPTIONAL - keys without a proxy use direct egress (no sticky binding).
 	if req.BoundProxyID < 0 {
 		writeError(w, http.StatusBadRequest, "bound_proxy_id must be >= 1 (or omit to bind no proxy)")
 		return

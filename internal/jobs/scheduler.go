@@ -197,11 +197,11 @@ func (s *Scheduler) scheduleOne(ctx context.Context, id int64) error {
 		}
 		if len(keys) == 0 {
 			// Distinguish structural unavailability (no keys at all / wrong GPU)
-			// from temporary cooldown — only the former may produce "unschedulable".
+			// from temporary cooldown - only the former may produce "unschedulable".
 			softKeys, err := s.loadEligibleKeys(ctx, pid, true)
 			if err == nil && len(softKeys) > 0 {
 				soft = true
-				rejections[pid] = "all keys in cooldown — waiting to retry"
+				rejections[pid] = "all keys in cooldown - waiting to retry"
 			} else {
 				rejections[pid] = "no eligible key (disabled, over local quota, or proxy unbound)"
 			}
@@ -281,7 +281,7 @@ func (s *Scheduler) scheduleOne(ctx context.Context, id int64) error {
 	}
 
 	if tried == 0 {
-		// Everything was rejected by quota watermark — nothing was attempted; stay queued for next cycle.
+		// Everything was rejected by quota watermark - nothing was attempted; stay queued for next cycle.
 		rj, _ := json.Marshal(rejections)
 		_, _ = s.DB.ExecContext(ctx, `UPDATE jobs SET status='queued', rejections=?, fail_reason='all candidates at quota watermark', updated_at=CURRENT_TIMESTAMP WHERE id=?`, string(rj), id)
 		return nil

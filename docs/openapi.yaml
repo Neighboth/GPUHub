@@ -143,7 +143,7 @@ paths:
   /providers/{id}/keys:
     post:
       tags: [keys]
-      summary: Add a key (credential encrypted at rest). bound_proxy_id is OPTIONAL since v2 — omit for direct egress
+      summary: Add a key (credential encrypted at rest). bound_proxy_id is OPTIONAL since v2 - omit for direct egress
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: string }, description: "provider id (e.g. 'runner' = Self-hosted Runner)" }
@@ -161,7 +161,7 @@ paths:
                   description: "opaque string or JSON, e.g. kaggle.json contents; for provider='runner': {\"base_url\":\"https://xxxx.ngrok.app\",\"token\":\"...\"}"
                 bound_proxy_id:
                   type: integer
-                  description: "OPTIONAL — id of an unbound proxy (1:1 sticky binding). Omit/0 to use direct egress."
+                  description: "OPTIONAL - id of an unbound proxy (1:1 sticky binding). Omit/0 to use direct egress."
                 daily_quota: { type: integer, default: 0 }
                 weekly_quota: { type: integer, default: 0 }
                 priority: { type: integer, default: 100, description: lower = preferred }
@@ -227,7 +227,7 @@ paths:
       description: |
         Rebinding a proxy to a key that already has one is allowed. If the target proxy is
         bound to a different key, the request fails with 409 unless `force: true` is supplied
-        (admin approval — the previous key is detached and disabled, and both actions are audit-logged).
+        (admin approval - the previous key is detached and disabled, and both actions are audit-logged).
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: key_id, in: path, required: true, schema: { type: integer } }
@@ -299,7 +299,7 @@ paths:
         '200': { description: Updated }
     delete:
       tags: [proxies]
-      summary: Delete a proxy. Bound keys become proxy-less and DISABLED — never auto-rebound. Admin only.
+      summary: Delete a proxy. Bound keys become proxy-less and DISABLED - never auto-rebound. Admin only.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -335,7 +335,7 @@ paths:
                 gpu_type_fallback:
                   type: array
                   items: { type: string }
-                  description: Ordered GPU fallback chain — tried in order when gpu_type is unavailable for matching providers, e.g. ["A100","H100","L40S","T4"]. Wins over provider_preference ordering.
+                  description: Ordered GPU fallback chain - tried in order when gpu_type is unavailable for matching providers, e.g. ["A100","H100","L40S","T4"]. Wins over provider_preference ordering.
                 min_vram_gb: { type: integer, minimum: 1, example: 16 }
                 gpu_count: { type: integer, minimum: 1, maximum: 8, example: 1 }
                 max_duration_seconds: { type: integer, default: 3600, maximum: 86400 }
@@ -427,7 +427,7 @@ paths:
         '200': { description: Settings }
     patch:
       tags: [settings]
-      summary: Update settings (admin). rotation_strategy applies to KEYS only — proxies never rotate.
+      summary: Update settings (admin). rotation_strategy applies to KEYS only - proxies never rotate.
       security: [{ bearerAuth: [] }]
       requestBody:
         content:
@@ -445,7 +445,7 @@ paths:
   /settings/test-webhook:
     post:
       tags: [settings]
-      summary: Send a test notification to the configured (or provided) webhook — Discord webhooks get a colored embed
+      summary: Send a test notification to the configured (or provided) webhook - Discord webhooks get a colored embed
       security: [{ bearerAuth: [] }]
       requestBody:
         content:

@@ -1,5 +1,17 @@
 import { PROVIDER_ICONS } from '../lib/providerIcons.generated';
 
+// Embedded brand icons (downloaded 2026-11 from public favicon services / Google s2; kept in-repo - no external calls).
+const PNG_ICONS = import.meta.glob('../assets/providers/*.png', {
+  eager: true,
+  import: 'default',
+  query: '?url',
+}) as unknown as Record<string, string>;
+
+function pngFor(id: string): string | undefined {
+  const hit = Object.entries(PNG_ICONS).find(([p]) => p.endsWith(`/${id}.png`));
+  return hit?.[1];
+}
+
 // Deterministic fallback palette for providers without a brand mark in simple-icons.
 const MONOGRAM_COLORS = [
   '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#ef4444', '#14b8a6',
@@ -30,6 +42,15 @@ export default function ProviderIcon({ id, size = 18, className = '' }: { id: st
         <svg width={size} height={size} viewBox="0 0 24 24" fill={`#${icon.hex}`} role="img" aria-label={icon.title}>
           <path d={icon.path} />
         </svg>
+      </span>
+    );
+  }
+  const png = pngFor(id);
+  if (png) {
+    return (
+      <span className={`inline-flex shrink-0 items-center justify-center overflow-hidden rounded-md border border-zinc-800 bg-zinc-900/70 ${className}`}
+        style={{ width: size + 12, height: size + 12 }}>
+        <img src={png} alt={id} width={size} height={size} style={{ objectFit: 'contain' }} loading="lazy" />
       </span>
     );
   }

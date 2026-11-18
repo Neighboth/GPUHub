@@ -154,7 +154,7 @@ func (m *Manager) buildTransport(keyID int64, proxyURL string) (*http.Transport,
 }
 
 // TransportForKey returns the cached, proxy-pinned transport for a key.
-// This is the ONLY way provider adapters get an *http.Client — guaranteeing sticky binding.
+// This is the ONLY way provider adapters get an *http.Client - guaranteeing sticky binding.
 func (m *Manager) TransportForKey(ctx context.Context, keyID int64) (*http.Transport, string, error) {
 	var proxyID sql.NullInt64
 	var proxyURL string
@@ -166,7 +166,7 @@ func (m *Manager) TransportForKey(ctx context.Context, keyID int64) (*http.Trans
 		return nil, "", err
 	}
 	if !proxyID.Valid {
-		// Direct egress is allowed — sticky binding applies only to BOUND proxies.
+		// Direct egress is allowed - sticky binding applies only to BOUND proxies.
 		m.cacheMu.Lock()
 		if t, ok := m.cache[keyID]; ok {
 			m.cacheMu.Unlock()
@@ -220,7 +220,7 @@ func (m *Manager) resolveURL(stored string) (string, error) {
 
 // HealthCheckAll tests every proxy that is bound to at least one key.
 // Unhealthy proxies are marked; bound keys are deactivated; admins are notified.
-// Proxies are NEVER auto-rebound — spec section 6.
+// Proxies are NEVER auto-rebound - spec section 6.
 func (m *Manager) HealthCheckAll(ctx context.Context, checkURL string, timeout time.Duration, notify func(level, msg string)) error {
 	rows, err := m.db.QueryContext(ctx, `
 		SELECT DISTINCT p.id, p.url FROM proxies p
@@ -256,7 +256,7 @@ func (m *Manager) HealthCheckAll(ctx context.Context, checkURL string, timeout t
 			res, _ := m.db.ExecContext(ctx, `UPDATE provider_keys SET active=0 WHERE bound_proxy_id=? AND active=1`, t.id)
 			n, _ := res.RowsAffected()
 			if notify != nil {
-				notify("critical", fmt.Sprintf("Proxy #%d (%s) failed health check: %s. %d bound key(s) deactivated. NO automatic rebinding performed — manual reassign required.", t.id, Redact(rawURL), checkErr, n))
+				notify("critical", fmt.Sprintf("Proxy #%d (%s) failed health check: %s. %d bound key(s) deactivated. NO automatic rebinding performed - manual reassign required.", t.id, Redact(rawURL), checkErr, n))
 			}
 			_, _ = m.db.ExecContext(ctx, `INSERT INTO audit_log(actor, action, detail) VALUES('system','proxy_health_fail', ?)`,
 				fmt.Sprintf("proxy_id=%d error=%s keys_disabled=%d", t.id, checkErr, n))

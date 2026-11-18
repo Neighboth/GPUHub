@@ -61,7 +61,7 @@ func main() {
 		log.Fatalf("crypto: %v", err)
 	}
 
-	// Sticky proxy transport cache — adapters get their HTTP clients exclusively through here.
+	// Sticky proxy transport cache - adapters get their HTTP clients exclusively through here.
 	proxyMgr := proxy.NewManager(conn)
 	proxyMgr.Decrypt = box.Decrypt
 	providers.BindProxyManager(proxyMgr)

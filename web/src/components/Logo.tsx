@@ -1,4 +1,4 @@
-// GPUHub logo — rounded square with circuit-style GPU chip glyph.
+// GPUHub logo - rounded square with circuit-style GPU chip glyph.
 export default function Logo({ size = 28, withWordmark = true }: { size?: number; withWordmark?: boolean }) {
   const s = size;
   return (

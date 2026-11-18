@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# GPUHub smoke test — run after `docker compose up -d` (or against any reachable instance).
+# GPUHub smoke test - run after `docker compose up -d` (or against any reachable instance).
 # Exercises: login -> create proxy -> add provider key bound to it -> submit a GPU-typed job -> read detail.
 # Usage: GPUHUB_URL=http://localhost:8080 ADMIN_PASSWORD=... ./scripts/smoke.sh
 # NOTE on expectations: the placeholder proxy (127.0.0.1:3128) is unreachable, so GPUHub's

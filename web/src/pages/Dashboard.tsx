@@ -236,8 +236,8 @@ export default function Dashboard() {
               {recentJobs.length === 0 ? (
                 <div className="py-8 text-center text-sm text-zinc-600">
                   {L(lang, {
-                    en: 'No jobs yet — submit one from your code (see examples/submit_job.py).',
-                    tr: 'Henüz iş yok — kodunuzdan bir tane gönderin (bkz. examples/submit_job.py).',
+                    en: 'No jobs yet - submit one from your code (see examples/submit_job.py).',
+                    tr: 'Henüz iş yok - kodunuzdan bir tane gönderin (bkz. examples/submit_job.py).',
                   })}
                 </div>
               ) : (

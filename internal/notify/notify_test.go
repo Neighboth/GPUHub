@@ -22,7 +22,7 @@ func TestDiscordWebhook_GetsEmbedPayload(t *testing.T) {
 
 	// Use the package-internal builder through an injected URL containing "discord.com/api/webhooks".
 	// The httptest URL can't contain that host substring; so verify buildPayload directly instead.
-	body := buildPayload("https://discord.com/api/webhooks/123/abc", "critical", "Proxy #1 down — key disabled")
+	body := buildPayload("https://discord.com/api/webhooks/123/abc", "critical", "Proxy #1 down - key disabled")
 	var embedMsg map[string]any
 	if err := json.Unmarshal(body, &embedMsg); err != nil {
 		t.Fatal(err)
@@ -36,7 +36,7 @@ func TestDiscordWebhook_GetsEmbedPayload(t *testing.T) {
 	if username != "GPUHub" {
 		t.Fatalf("username = %q, want GPUHub", username)
 	}
-	if embed["title"] == nil || embed["description"] != "Proxy #1 down — key disabled" {
+	if embed["title"] == nil || embed["description"] != "Proxy #1 down - key disabled" {
 		t.Fatalf("embed malformed: %v", embed)
 	}
 	if color, _ := embed["color"].(float64); color != 0xe74c3c {
@@ -75,7 +75,7 @@ func TestSendWebhook_DiscordFailureIsError(t *testing.T) {
 		http.Error(w, "bad", http.StatusInternalServerError)
 	}))
 	defer srv.Close()
-	// A non-discord URL keeps plain format — we just check error propagation.
+	// A non-discord URL keeps plain format - we just check error propagation.
 	if err := SendWebhook(context.Background(), srv.URL, "critical", "x"); err == nil {
 		t.Fatal("expected error on 5xx webhook")
 	}

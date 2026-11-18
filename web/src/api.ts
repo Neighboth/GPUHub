@@ -135,7 +135,7 @@ async function request<T = unknown>(path: string, opts: RequestOptions = {}): Pr
     if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
       window.location.href = '/login';
     }
-    throw new ApiError(401, null, 'Session expired — please sign in again');
+    throw new ApiError(401, null, 'Session expired - please sign in again');
   }
 
   const text = await res.text();
@@ -568,7 +568,7 @@ async function audit(limit = 200): Promise<AuditEntry[]> {
 
 /** Mask userinfo in a proxy URL: socks5://user:pass@host -> socks5://user:****@host */
 export function maskProxyUrl(url?: string | null): string {
-  if (!url) return '—';
+  if (!url) return '-';
   try {
     return url.replace(/(\/\/[^/\s:@]+:)[^@\s/]+(@)/, '$1****$2');
   } catch {
@@ -578,8 +578,8 @@ export function maskProxyUrl(url?: string | null): string {
 
 export function jobProviderName(j: Job): string {
   if (typeof j.provider === 'string') return j.provider;
-  if (j.provider && typeof j.provider === 'object') return j.provider.name ?? j.provider.id ?? '—';
-  return j.provider_name ?? '—';
+  if (j.provider && typeof j.provider === 'object') return j.provider.name ?? j.provider.id ?? '-';
+  return j.provider_name ?? '-';
 }
 
 export function jobCreatedAt(j: Job): string | undefined {
@@ -597,11 +597,11 @@ export function attemptStartedAt(a: JobAttempt): string | undefined {
 }
 
 export function attemptProxyLabel(a: JobAttempt): string {
-  return a.proxy_label ?? a.proxy ?? '—';
+  return a.proxy_label ?? a.proxy ?? '-';
 }
 
 export function attemptKeyLabel(a: JobAttempt): string {
-  return a.key_label ?? a.key ?? '—';
+  return a.key_label ?? a.key ?? '-';
 }
 
 export function auditTime(a: AuditEntry): string | undefined {

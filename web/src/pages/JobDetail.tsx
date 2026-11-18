@@ -174,11 +174,11 @@ export default function JobDetail() {
       <Card>
         <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
           <Meta label={L(lang, { en: 'GPU type', tr: 'GPU tipi' })} value={job.gpu_type ?? 'Any'} />
-          <Meta label={L(lang, { en: 'Min VRAM', tr: 'Min VRAM' })} value={job.min_vram_gb != null ? `${job.min_vram_gb} GB` : '—'} />
-          <Meta label={L(lang, { en: 'GPU count', tr: 'GPU adedi' })} value={job.gpu_count != null ? String(job.gpu_count) : '—'} />
-          <Meta label={L(lang, { en: 'Max duration', tr: 'Maks süre' })} value={job.max_duration_seconds ? `${job.max_duration_seconds}s` : '—'} />
+          <Meta label={L(lang, { en: 'Min VRAM', tr: 'Min VRAM' })} value={job.min_vram_gb != null ? `${job.min_vram_gb} GB` : '-'} />
+          <Meta label={L(lang, { en: 'GPU count', tr: 'GPU adedi' })} value={job.gpu_count != null ? String(job.gpu_count) : '-'} />
+          <Meta label={L(lang, { en: 'Max duration', tr: 'Maks süre' })} value={job.max_duration_seconds ? `${job.max_duration_seconds}s` : '-'} />
           <Meta label={L(lang, { en: 'Provider', tr: 'Sağlayıcı' })} value={jobProviderName(job)} />
-          <Meta label={L(lang, { en: 'Cost', tr: 'Maliyet' })} value={cost != null ? usd(cost) : '—'} tone="emerald" />
+          <Meta label={L(lang, { en: 'Cost', tr: 'Maliyet' })} value={cost != null ? usd(cost) : '-'} tone="emerald" />
         </CardContent>
       </Card>
 
@@ -189,7 +189,7 @@ export default function JobDetail() {
           {rejections.length > 0 && (
             <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-4">
               <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-400">
-                <ShieldAlert size={14} /> {L(lang, { en: 'Why unschedulable — provider rejections', tr: 'Neden unschedulable — sağlayıcı retleri' })}
+                <ShieldAlert size={14} /> {L(lang, { en: 'Why unschedulable - provider rejections', tr: 'Neden unschedulable - sağlayıcı retleri' })}
               </div>
               <ul className="space-y-1.5">
                 {rejections.map(([provider, reason]) => (
@@ -217,7 +217,7 @@ export default function JobDetail() {
             <CardContent className="p-0">
               {attempts.length === 0 ? (
                 <div className="px-5 py-6 text-center text-xs text-zinc-600">
-                  {L(lang, { en: 'No attempts yet — the scheduler has not placed this job.', tr: 'Henüz deneme yok — scheduler bu işi henüz yerleştiremedi.' })}
+                  {L(lang, { en: 'No attempts yet - the scheduler has not placed this job.', tr: 'Henüz deneme yok - scheduler bu işi henüz yerleştiremedi.' })}
                 </div>
               ) : (
                 <Table className="rounded-none border-0">
@@ -234,11 +234,11 @@ export default function JobDetail() {
                   <TBody>
                     {attempts.map((a, i) => (
                       <Tr key={i}>
-                        <Td className="text-xs text-zinc-200">{a.provider_name ?? a.provider ?? '—'}</Td>
+                        <Td className="text-xs text-zinc-200">{a.provider_name ?? a.provider ?? '-'}</Td>
                         <Td className="font-mono text-[11px] text-zinc-400">{attemptKeyLabel(a)}</Td>
                         <Td className="font-mono text-[11px] text-zinc-400">{attemptProxyLabel(a)}</Td>
                         <Td><StatusBadge status={a.status ?? 'unknown'} /></Td>
-                        <Td className="max-w-[160px] truncate text-[11px] text-red-300/90" title={a.error ?? ''}>{a.error ?? '—'}</Td>
+                        <Td className="max-w-[160px] truncate text-[11px] text-red-300/90" title={a.error ?? ''}>{a.error ?? '-'}</Td>
                         <Td className="text-[11px] text-zinc-500">{fmtDateTime(attemptStartedAt(a))}</Td>
                       </Tr>
                     ))}
@@ -261,7 +261,7 @@ export default function JobDetail() {
             {wsFailed && storedLogs ? (
               <>
                 <div className="mb-2 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-amber-500/90">
-                  <Unplug size={11} /> {L(lang, { en: 'Live stream unavailable — showing stored logs', tr: 'Canlı akış yok — kayıtlı loglar gösteriliyor' })}
+                  <Unplug size={11} /> {L(lang, { en: 'Live stream unavailable - showing stored logs', tr: 'Canlı akış yok - kayıtlı loglar gösteriliyor' })}
                 </div>
                 <pre className="h-96 overflow-auto whitespace-pre-wrap rounded-lg border border-zinc-800 bg-zinc-950 p-3 font-mono text-[11px] leading-relaxed text-zinc-300">
                   {storedLogs}
@@ -277,7 +277,7 @@ export default function JobDetail() {
                     {wsState === 'connecting'
                       ? L(lang, { en: 'Connecting to log stream…', tr: 'Log akışına bağlanılıyor…' })
                       : wsState === 'live'
-                        ? L(lang, { en: 'Connected — waiting for log output…', tr: 'Bağlandı — log çıktısı bekleniyor…' })
+                        ? L(lang, { en: 'Connected - waiting for log output…', tr: 'Bağlandı - log çıktısı bekleniyor…' })
                         : wsFailed
                           ? L(lang, { en: 'Live stream unavailable and no stored logs were returned.', tr: 'Canlı akış yok ve kayıtlı log da dönmedi.' })
                           : L(lang, { en: 'Stream closed. No log output received.', tr: 'Akış kapandı. Log çıktısı alınmadı.' })}

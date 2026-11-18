@@ -66,7 +66,7 @@ func rejectionReason(caps providers.Capabilities, spec providers.JobSpec) string
 				if spec.GPUCount > 0 && g.MaxCount > 0 && g.MaxCount < spec.GPUCount {
 					return fmt.Sprintf("GPU %s max %d per job < required %d", g.Type, g.MaxCount, spec.GPUCount)
 				}
-				return "" // shouldn't happen — matched
+				return "" // shouldn't happen - matched
 			}
 		}
 	}

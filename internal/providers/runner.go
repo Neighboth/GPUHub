@@ -16,7 +16,7 @@ import (
 //
 // How it works:
 //  1. The user deploys the self-contained runner (examples/runner.py) INSIDE any
-//     environment that gives them a GPU — e.g. a Kaggle/Colab cell, a Modal function,
+//     environment that gives them a GPU - e.g. a Kaggle/Colab cell, a Modal function,
 //     a Lightning studio, a home lab with an RTX card, a VPS with GPU passthrough.
 //  2. The runner authenticates callers with a shared token and exposes:
 //       GET  /health          → {"status":"ok","gpus":[{"type":"T4","vram_gb":16}]}
@@ -44,7 +44,7 @@ func NewRunner() *runnerAdapter {
 		},
 		MaxDurationHours: 24, Frameworks: []string{"pytorch", "tensorflow", "jax", "any"},
 		Notebooks: false, Docker: true, SSH: true,
-		FreeTierNotes: "Any machine with a GPU where you deploy examples/runner.py — Kaggle/Colab cells, Modal deploy, home RTX server, cloud VMs",
+		FreeTierNotes: "Any machine with a GPU where you deploy examples/runner.py - Kaggle/Colab cells, Modal deploy, home RTX server, cloud VMs",
 	}}
 }
 
@@ -76,7 +76,7 @@ func runnerParseCred(raw string) (runnerCred, error) {
 		}
 		return runnerCred{baseURL: strings.TrimRight(u, "/"), token: tok}, nil
 	}
-	return c, fmt.Errorf("runner credential must be JSON {\"base_url\":\"https://...\",\"token\":\"...\"} (or {\"url\":...,\"token\":...}) — got token-only credential")
+	return c, fmt.Errorf("runner credential must be JSON {\"base_url\":\"https://...\",\"token\":\"...\"} (or {\"url\":...,\"token\":...}) - got token-only credential")
 }
 
 func (r *runnerAdapter) do(ctx context.Context, cred Credential, method, path string, body any) ([]byte, error) {
@@ -159,7 +159,7 @@ func (r *runnerAdapter) ListGPUs(ctx context.Context, cred Credential, _ string)
 
 func (r *runnerAdapter) Quota(ctx context.Context, cred Credential, _ string) (Quota, error) {
 	// Runner is self-hosted: no provider quota to report.
-	return Quota{Raw: "self-hosted runner — no provider quota (your hardware)"}, nil
+	return Quota{Raw: "self-hosted runner - no provider quota (your hardware)"}, nil
 }
 
 func (r *runnerAdapter) Submit(ctx context.Context, cred Credential, _ string, job JobSpec) (RemoteJobID, error) {

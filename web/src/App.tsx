@@ -37,7 +37,7 @@ export default function App() {
               <Route index element={<Dashboard />} />
               <Route path="providers" element={<Providers />} />
               <Route path="proxies" element={<Proxies />} />
-              {/* /jobs removed: jobs are submitted via code/API (see README + examples/) — monitoring lives on the Dashboard */}
+              {/* /jobs removed: jobs are submitted via code/API (see README + examples/) - monitoring lives on the Dashboard */}
               <Route path="jobs/:id" element={<JobDetail />} />
               <Route path="keys" element={<Keys />} />
               <Route path="settings" element={<Settings />} />

@@ -137,7 +137,7 @@ func ParseCredential(raw string) (CredentialPayload, error) {
 				p.BaseURL = u
 			}
 		}
-		// Accept top-level "url" (unknown field — parse manually).
+		// Accept top-level "url" (unknown field - parse manually).
 		if p.BaseURL == "" {
 			var withURL struct {
 				URL string `json:"url"`

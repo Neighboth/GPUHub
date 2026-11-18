@@ -1,4 +1,4 @@
-// AUTO-GENERATED from simple-icons (CC0) — do not edit by hand. Re-run scripts/genicons.mjs.
+// AUTO-GENERATED from simple-icons (CC0) - do not edit by hand. Re-run scripts/genicons.mjs.
 export interface SimpleIcon { title: string; hex: string; path: string }
 export const PROVIDER_ICONS: Record<string, SimpleIcon> = {
  "kaggle": {

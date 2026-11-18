@@ -11,7 +11,7 @@ export function usdShort(micros?: number | null): string {
 }
 
 export function fmtDateTime(s?: string | number | null): string {
-  if (s === undefined || s === null || s === '') return '—';
+  if (s === undefined || s === null || s === '') return '-';
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) return String(s);
   return d.toLocaleString(undefined, {
@@ -24,14 +24,14 @@ export function fmtDateTime(s?: string | number | null): string {
 }
 
 export function fmtDate(s?: string | number | null): string {
-  if (s === undefined || s === null || s === '') return '—';
+  if (s === undefined || s === null || s === '') return '-';
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) return String(s);
   return d.toLocaleDateString(undefined, { month: 'short', day: '2-digit' });
 }
 
 export function shortId(id?: string | null, len = 8): string {
-  if (!id) return '—';
+  if (!id) return '-';
   return id.length > len ? id.slice(0, len) : id;
 }
 

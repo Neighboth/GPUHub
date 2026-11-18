@@ -67,7 +67,7 @@ export default function Login() {
     try {
       if (isSetup) {
         await api.setup({ username: username.trim(), password, confirm });
-        toast(L(lang, { en: 'Admin account created — please sign in', tr: 'Admin hesabı oluşturuldu — giriş yapın' }), 'success');
+        toast(L(lang, { en: 'Admin account created - please sign in', tr: 'Admin hesabı oluşturuldu - giriş yapın' }), 'success');
         setNeedsSetup(false);
         setPassword('');
         setConfirm('');
@@ -160,8 +160,8 @@ export default function Login() {
                   <p className="text-xs text-zinc-500">
                     {isSetup
                       ? L(lang, {
-                          en: 'First run — no admin exists yet. This account takes ownership.',
-                          tr: 'İlk çalıştırma — henüz admin yok. Bu hesap sahipliği alır.',
+                          en: 'First run - no admin exists yet. This account takes ownership.',
+                          tr: 'İlk çalıştırma - henüz admin yok. Bu hesap sahipliği alır.',
                         })
                       : L(lang, {
                           en: 'Use your GPUHub credentials to continue.',

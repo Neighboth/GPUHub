@@ -30,7 +30,7 @@ func NewModal() *apiAdapter {
 
 // --- 13. Beam ---
 // Auth: Beam token (Bearer). Free tier: free monthly hour allowance on T4/A10G for running containers.
-// API: beam.ai REST v1 (beta) — /containers, /deployments. NOTE: endpoints inferred from public SDK.
+// API: beam.ai REST v1 (beta) - /containers, /deployments. NOTE: endpoints inferred from public SDK.
 func NewBeam() *apiAdapter {
 	return &apiAdapter{
 		id: "beam", name: "Beam", baseURL: "https://api.beam.ai/v1",
@@ -60,14 +60,14 @@ func NewIntelTiber() *apiAdapter {
 }
 
 // --- 15. Genesis Cloud ---
-// NOTE: genesiscloud.com free trial — one-time credit, NOT permanent free tier. Included per spec list with NOTE.
-// Auth: API key (Bearer). Real free tier does not exist as of 2026-11 docs check — adapter kept for completeness, gated behind enabled=false.
+// NOTE: genesiscloud.com free trial - one-time credit, NOT permanent free tier. Included per spec list with NOTE.
+// Auth: API key (Bearer). Real free tier does not exist as of 2026-11 docs check - adapter kept for completeness, gated behind enabled=false.
 func NewGenesis() *apiAdapter {
 	return &apiAdapter{
 		id: "genesis", name: "Genesis Cloud", baseURL: "https://api.genesiscloud.com/compute/v1",
 		caps: Capabilities{GPUs: []GPU{gpu("A100", 80, 1), gpu("H100", 80, 1)}, MaxDurationHours: 24,
 			Frameworks: []string{"pytorch", "tensorflow"}, Notebooks: true, Docker: true, SSH: true,
-			FreeTierNotes: "NO permanent free tier (one-time trial credit only) — verify before use"},
+			FreeTierNotes: "NO permanent free tier (one-time trial credit only) - verify before use"},
 		auth:     bearer,
 		validate: "/volumes", submit: "/instances",
 		status: func(id string) string { return "/instances/" + id },
@@ -83,7 +83,7 @@ func NewAnyscale() *apiAdapter {
 		id: "anyscale", name: "Anyscale", baseURL: "https://console.anyscale.com/api/v1",
 		caps: Capabilities{GPUs: []GPU{gpu("A100", 40, 1)}, MaxDurationHours: 8,
 			Frameworks: []string{"pytorch", "ray"}, Notebooks: true, Docker: true, SSH: true,
-			FreeTierNotes: "Free trial credits only (not a permanent free tier) — verify before use"},
+			FreeTierNotes: "Free trial credits only (not a permanent free tier) - verify before use"},
 		auth:     bearer,
 		validate: "/clouds", submit: "/workspaces",
 		status: func(id string) string { return "/workspaces/" + id },
@@ -115,7 +115,7 @@ func NewNebius() *apiAdapter {
 		id: "nebius", name: "Nebius Cloud", baseURL: "https://api.nebius.cloud/compute/v1",
 		caps: Capabilities{GPUs: []GPU{gpu("H100", 80, 1), gpu("A100", 80, 1)}, MaxDurationHours: 24,
 			Frameworks: []string{"pytorch"}, Notebooks: false, Docker: true, SSH: true,
-			FreeTierNotes: "No free GPU quota in public tier — adapter present for completeness; disabled by default"},
+			FreeTierNotes: "No free GPU quota in public tier - adapter present for completeness; disabled by default"},
 		auth:     bearer,
 		validate: "/instances", submit: "/instances",
 		status: func(id string) string { return "/instances/" + id },
@@ -125,7 +125,7 @@ func NewNebius() *apiAdapter {
 
 // --- 19. Hyperbolic ---
 // NOTE: hyperbolic.xyz free tier: GPU marketplace per-second, free trial credits (one-time). Not permanent.
-// Auth: Bearer key. API: /marketplace (OpenAI-compatible for inference — excluded category) but compute via rental API.
+// Auth: Bearer key. API: /marketplace (OpenAI-compatible for inference - excluded category) but compute via rental API.
 func NewHyperbolic() *apiAdapter {
 	return &apiAdapter{
 		id: "hyperbolic", name: "Hyperbolic", baseURL: "https://api.hyperbolic.xyz/v1",
@@ -140,7 +140,7 @@ func NewHyperbolic() *apiAdapter {
 }
 
 // --- 20. Salad Cloud ---
-// Auth: API key (Bearer). Free tier: free community credits / sponsored GPU for inference ONLY — no notebook/compute.
+// Auth: API key (Bearer). Free tier: free community credits / sponsored GPU for inference ONLY - no notebook/compute.
 // NOTE: Inference-focused; compute containers possible on free community tier at mercy of capacity. Included disabled.
 func NewSalad() *apiAdapter {
 	return &apiAdapter{
@@ -162,9 +162,9 @@ func NewRunPod() *apiAdapter {
 		id: "runpod", name: "RunPod", baseURL: "https://api.runpod.io/graphql",
 		caps: Capabilities{GPUs: []GPU{gpu("T4", 16, 1), gpu("RTX4090", 24, 1), gpu("A100", 80, 1)}, MaxDurationHours: 24,
 			Frameworks: []string{"pytorch", "tensorflow"}, Notebooks: true, Docker: true, SSH: true,
-			FreeTierNotes: "NO permanent free tier (one-time $1 credit) — not eligible; disabled by default"},
+			FreeTierNotes: "NO permanent free tier (one-time $1 credit) - not eligible; disabled by default"},
 		auth:     bearer,
-		validate: "", // GraphQL endpoint; validation via POST { query { myself { id } } } — not implemented, see NOTE
+		validate: "", // GraphQL endpoint; validation via POST { query { myself { id } } } - not implemented, see NOTE
 		submit:   "",
 	}
 }

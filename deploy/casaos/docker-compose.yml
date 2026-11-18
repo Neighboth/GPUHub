@@ -1,8 +1,8 @@
-# GPUHub — CasaOS için docker-compose.yml (özel kurulum şablonu, sır YOK)
+# GPUHub - CasaOS için docker-compose.yml (özel kurulum şablonu, sır YOK)
 #
 # CasaOS kurulumu:
 #   1. Bu dosyanın İÇİNİ CasaOS'a yapıştırın (App Store → Custom Install → Install from docker-compose.yml).
-#   2. GPUHUB_MASTER_KEY'i üretip yazın (openssl rand -base64 48). Master key'i sonra DEĞİŞTİRMEYİN —
+#   2. GPUHUB_MASTER_KEY'i üretip yazın (openssl rand -base64 48). Master key'i sonra DEĞİŞTİRMEYİN -
 #      değişirse tüm kayıtlı sağlayıcı anahtarları çözülemez olur!
 #   3. ADMIN_PASSWORD'ü değiştirin; ilk girişte admin oluşur.
 #   4. CasaOS'ta Web UI port mapping = 8090 (host portu boş değilse "8090:8080" yerine boş port seçin).

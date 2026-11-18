@@ -130,10 +130,10 @@ export default function Audit() {
                     {e.action ? (
                       <Badge variant={actionVariant(e.action)}>{e.action}</Badge>
                     ) : (
-                      <span className="text-xs text-zinc-600">—</span>
+                      <span className="text-xs text-zinc-600">-</span>
                     )}
                   </Td>
-                  <Td className="max-w-xl break-words text-xs text-zinc-400">{e.detail ?? e.message ?? '—'}</Td>
+                  <Td className="max-w-xl break-words text-xs text-zinc-400">{e.detail ?? e.message ?? '-'}</Td>
                 </Tr>
               ))}
             </TBody>
