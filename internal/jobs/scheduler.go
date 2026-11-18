@@ -448,6 +448,10 @@ func (s *Scheduler) pollOne(ctx context.Context, id int64) error {
 	st, err := p.Status(ctx2, cred, "", providers.RemoteJobID(j.RemoteID.String))
 	cancel()
 	if err != nil {
+		// Remote job is gone (runner died / 404 / 410): fail over to the next candidate.
+		if he, ok := err.(*providers.HTTPError); ok && (he.Status == 404 || he.Status == 410) {
+			return s.finishOrFailover(ctx, j, p, "failed", "remote job vanished (HTTP "+fmt.Sprint(he.Status)+")")
+		}
 		log.Printf("poll job %d: %v", id, err)
 		return err
 	}
