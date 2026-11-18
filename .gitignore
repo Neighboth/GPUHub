@@ -10,3 +10,4 @@ data/
 scripts/*.log
 
 web/*.tsbuildinfo
+*.local.yml
