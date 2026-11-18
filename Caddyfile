@@ -1,0 +1,9 @@
+# Replace gpuhub.example.com with your domain. For local use, http://localhost is fine.
+gpuhub.example.com {
+	reverse_proxy gpuhub:8080
+}
+
+# Local HTTP fallback:
+# :80 {
+# 	reverse_proxy gpuhub:8080
+# }

@@ -1,0 +1,12 @@
+web/node_modules
+node_modules
+bin
+data
+*.db
+*.db-wal
+*.db-shm
+.env
+.git
+.github
+*.md.bak
+scripts/*.log

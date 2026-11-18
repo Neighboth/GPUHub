@@ -1,0 +1,12 @@
+node_modules/
+web/node_modules/
+# web/dist is intentionally NOT ignored: the Docker build embeds it. Locally, npm run build refreshes it.
+bin/
+data/
+*.db
+*.db-wal
+*.db-shm
+.env
+scripts/*.log
+
+web/*.tsbuildinfo

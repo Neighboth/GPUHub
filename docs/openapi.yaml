@@ -1,0 +1,458 @@
+openapi: 3.1.0
+info:
+  title: GPUHub API
+  version: 1.0.0
+  description: |
+    REST API for the GPUHub free-tier GPU orchestration platform.
+    All endpoints except /auth/login and /auth/status require a Bearer JWT.
+    Mutating requests must include `X-Requested-With: XMLHttpRequest` (CSRF protection).
+servers:
+  - url: /api/v1
+tags:
+  - name: auth
+  - name: providers
+  - name: keys
+  - name: proxies
+  - name: jobs
+  - name: dashboard
+  - name: audit
+  - name: settings
+paths:
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Login with username/password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string }
+      responses:
+        '200':
+          description: Tokens issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: { type: string }
+                  refresh_token: { type: string }
+                  expires_in: { type: integer }
+                  user:
+                    type: object
+                    properties:
+                      username: { type: string }
+                      role: { type: string }
+        '401': { description: Invalid credentials }
+        '429': { description: Rate limited }
+  /auth/refresh:
+    post:
+      tags: [auth]
+      summary: Rotate refresh token, get a new access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        '200': { description: New token pair }
+        '401': { description: Invalid/expired refresh token }
+  /auth/status:
+    get:
+      tags: [auth]
+      summary: Whether a first-run setup is required
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  needs_setup: { type: boolean }
+  /auth/setup:
+    post:
+      tags: [auth]
+      summary: Create the first admin (only when no users exist)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string, minLength: 3 }
+                password: { type: string, minLength: 8 }
+      responses:
+        '201': { description: Admin created }
+        '409': { description: Admin already exists }
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Revoke a refresh token
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+  /auth/me:
+    get:
+      tags: [auth]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Current user }
+  /gpu-types:
+    get:
+      tags: [providers]
+      summary: GPU types known to the scheduler (plus "any")
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: GPU catalog }
+  /providers:
+    get:
+      tags: [providers]
+      summary: List provider adapters with capabilities, enabled state and key counts
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Provider list }
+  /providers/{id}:
+    patch:
+      tags: [providers]
+      summary: Enable/disable a provider, or set its JSON config
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled: { type: boolean }
+                config: { type: object }
+      responses:
+        '200': { description: Updated }
+  /providers/{id}/keys:
+    post:
+      tags: [keys]
+      summary: Add a key (credential encrypted at rest). bound_proxy_id is REQUIRED (sticky 1:1 binding)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string }, description: provider id }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [credential, bound_proxy_id]
+              properties:
+                label: { type: string }
+                credential: { type: string, description: "opaque string or JSON, e.g. kaggle.json contents" }
+                bound_proxy_id:
+                  type: integer
+                  description: id of a proxy not bound to any other key (1:1 sticky binding)
+                daily_quota: { type: integer, default: 0 }
+                weekly_quota: { type: integer, default: 0 }
+                priority: { type: integer, default: 100, description: lower = preferred }
+                weight: { type: integer, default: 1 }
+      responses:
+        '201': { description: Key created }
+        '400': { description: Validation error (missing credential/proxy) }
+        '409': { description: Proxy already bound to another key }
+  /providers/{id}/test:
+    post:
+      tags: [keys]
+      summary: Validate one or all keys of a provider (outbound call goes through each key's bound proxy)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                key_id: { type: integer }
+      responses:
+        '200': { description: Per-key test results }
+  /providers/{id}/quota:
+    get:
+      tags: [keys]
+      summary: Provider-side quota for each key of this provider (as exposed by the provider API)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Quota report per key }
+  /keys:
+    get:
+      tags: [keys]
+      summary: List all keys with masked credentials, bound proxy info, quotas and health
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Key list }
+  /keys/{key_id}:
+    patch:
+      tags: [keys]
+      summary: Update key metadata (label, quotas, priority, weight, active)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: key_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Updated }
+    delete:
+      tags: [keys]
+      summary: Delete a key permanently (admin). Invalidates the sticky transport.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: key_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Deleted }
+        '403': { description: Admin role required }
+  /keys/{key_id}/proxy:
+    patch:
+      tags: [keys]
+      summary: MANUALLY reassign the sticky proxy of a key (admin). This is the ONLY way a binding changes.
+      description: |
+        Rebinding a proxy to a key that already has one is allowed. If the target proxy is
+        bound to a different key, the request fails with 409 unless `force: true` is supplied
+        (admin approval — the previous key is detached and disabled, and both actions are audit-logged).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: key_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [proxy_id]
+              properties:
+                proxy_id: { type: integer }
+                force: { type: boolean, default: false, description: admin approval to detach this proxy from its current key }
+      responses:
+        '200': { description: Reassigned }
+        '409': { description: Proxy bound to another key (see bound_key_id) }
+  /keys/{key_id}/test:
+    post:
+      tags: [keys]
+      summary: Test a key via its bound proxy
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: key_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: "{ok, error?}" }
+  /keys/{key_id}/reveal:
+    post:
+      tags: [keys]
+      summary: Reveal the decrypted credential (admin; audit-logged)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: key_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Decrypted credential }
+        '403': { description: Admin role required }
+  /proxies:
+    get:
+      tags: [proxies]
+      summary: List proxies with health and the key bound to each (1:1)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Proxy list }
+    post:
+      tags: [proxies]
+      summary: Add a proxy (http/https/socks5, optional user:pass). URL stored encrypted at rest.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label, url]
+              properties:
+                label: { type: string }
+                url: { type: string, example: "socks5://user:pass@1.2.3.4:1080" }
+                country: { type: string }
+      responses:
+        '201': { description: Created }
+        '400': { description: Invalid proxy URL/scheme }
+  /proxies/{id}:
+    patch:
+      tags: [proxies]
+      summary: Update proxy label/url/country. Changing URL invalidates cached sticky transports.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Updated }
+    delete:
+      tags: [proxies]
+      summary: Delete a proxy. Bound keys become proxy-less and DISABLED — never auto-rebound. Admin only.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: "Deleted; response lists disabled_keys" }
+  /proxies/{id}/test:
+    post:
+      tags: [proxies]
+      summary: On-demand health check through the proxy (also updates stored health_status)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: "{ok, health_status, error?}" }
+  /jobs:
+    post:
+      tags: [jobs]
+      summary: Submit a job. gpu_type, min_vram_gb and gpu_count are MANDATORY.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, payload, gpu_type, min_vram_gb, gpu_count]
+              properties:
+                type: { type: string, enum: [script, notebook, docker, command] }
+                payload: { type: string, description: script body / docker image / notebook URL / command }
+                gpu_type:
+                  type: string
+                  description: T4|P100|V100|A100|H100|L4|L40S|RTX4090|RTX6000Ada|MI300X|Gaudi2|any
+                min_vram_gb: { type: integer, minimum: 1, example: 16 }
+                gpu_count: { type: integer, minimum: 1, maximum: 8, example: 1 }
+                max_duration_seconds: { type: integer, default: 3600, maximum: 86400 }
+                provider_preference:
+                  type: array
+                  items: { type: string }
+                  description: optional allow-list of provider ids
+                max_cost_usd: { type: number, default: 0, description: 0 = no cap }
+      responses:
+        '201': { description: "Job queued", content: { application/json: { schema: { type: object, properties: { id: {type: integer}, status: {type: string} } } } } }
+        '400': { description: Missing/invalid GPU fields or payload }
+    get:
+      tags: [jobs]
+      summary: List jobs (newest first; ?status= filter, ?limit= up to 500)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer } }
+      responses:
+        '200': { description: Job list }
+  /jobs/{id}:
+    get:
+      tags: [jobs]
+      summary: Job detail incl. failover attempts, cost, rejection reasons (why unschedulable), logs
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Job detail }
+        '404': { description: Not found }
+  /jobs/{id}/logs:
+    get:
+      tags: [jobs]
+      summary: Live logs over WebSocket (token via Bearer header or ?token=)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '101': { description: Switching Protocols (WebSocket) }
+  /jobs/{id}/cancel:
+    post:
+      tags: [jobs]
+      summary: Cancel a queued/running job (best-effort remote cancel)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Cancelled }
+        '409': { description: Job already in a terminal state }
+  /dashboard/summary:
+    get:
+      tags: [dashboard]
+      summary: Running/queued counts, 24h outcomes, today's cost, 14-day cost series, per-provider quota, recent errors
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Summary }
+  /audit:
+    get:
+      tags: [audit]
+      summary: Audit log (newest first, last 200 entries)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Audit entries }
+  /notifications:
+    get:
+      tags: [audit]
+      summary: Admin notifications (quota watermark hits, key auto-disable, proxy health failures)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Notifications }
+  /notifications/{id}/read:
+    post:
+      tags: [audit]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Marked read }
+  /settings:
+    get:
+      tags: [settings]
+      summary: Get scheduler/rotation strategy, watermark, retries, webhook (masked)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Settings }
+    patch:
+      tags: [settings]
+      summary: Update settings (admin). rotation_strategy applies to KEYS only — proxies never rotate.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rotation_strategy: { type: string, enum: [round_robin, least_used, most_quota, weighted] }
+                scheduler_strategy: { type: string, enum: [round_robin, least_used, most_quota, weighted] }
+                quota_high_watermark: { type: string, example: "0.90" }
+                max_retries: { type: string }
+                notify_webhook_url: { type: string }
+      responses:
+        '200': { description: Updated }
+  /settings/rotate-master-key:
+    post:
+      tags: [settings]
+      summary: Re-encrypt all stored credentials + proxy URLs with a new master key (admin). Then set GPUHUB_MASTER_KEY and restart.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_master_key, new_master_key]
+              properties:
+                current_master_key: { type: string }
+                new_master_key: { type: string, minLength: 16 }
+      responses:
+        '200': { description: "Rotation complete; restart required" }
+        '403': { description: current_master_key mismatch }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

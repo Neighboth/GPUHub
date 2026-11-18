@@ -1,0 +1,44 @@
+# GPUHub — CasaOS için docker-compose.yml
+#
+# CasaOS kurulumu:
+#   1. GHCR private ise önce sunucuda bir kez:
+#        docker login ghcr.io -u Neighboth -p <GITHUB_PAT read:packages>
+#      (Public yaparsanız bu adım gerekmez.)
+#   2. Bu dosyayı CasaOS'a yükleyin (App Store → "Custom install" → Install from compose file)
+#      veya bir klasöre koyup `docker compose up -d` ile çalıştırın.
+#   3. .env YOK: sırlar aşağıdaki environment bloğunda inline olarak verilir.
+#      GPUHUB_MASTER_KEY'i DEĞİŞTİRMEYİN (deploydan sonra değiştirirseniz mevcut
+#      anahtarlar çözülemez hale gelir — sadece yeni .env/rotate akışıyla değiştirilebilir).
+#      İlk girişte ADMIN_PASSWORD ile giriş yapın; sonrasında arayüzden değiştirebilirsiniz.
+#
+# Not: host portu 8090; CasaOS arka planda nginx proxy'siyle bu porta yönlendirir
+# (App Settings → Web UI port mapping = 8090). 8080'i boşsa "8090:8080" yerine "8080:8080" kullanın.
+
+services:
+  gpuhub:
+    image: ghcr.io/neighboth/gpuhub:latest
+    container_name: gpuhub
+    restart: unless-stopped
+    ports:
+      - "8090:8080"
+    environment:
+      # Zorunlu: en az 16 karakter rastgele bir anahtar (openssl rand -base64 32)
+      GPUHUB_MASTER_KEY: "BURAYA-COK-UZUN-RASTGELE-BIR-ANAHTAR-URETIN"
+      GPUHUB_JWT_SECRET: ""                # boşsa master key'den türetilir (önerilen: ayrı secret)
+      ADMIN_USERNAME: "admin"
+      ADMIN_PASSWORD: "BURAYI-DEGISTIRIN"  # ilk çalıştırmada admin oluşturur; sonra panelden değiştirin
+      GPUHUB_DB_PATH: /data/gpuhub.db
+      GPUHUB_PROXY_HEALTH_URL: "https://api.ipify.org?format=json"
+      GPUHUB_SCHEDULER_STRATEGY: most_quota
+      GPUHUB_ROTATION_STRATEGY: most_quota
+      GPUHUB_QUOTA_HIGH_WATERMARK: "0.90"
+      GPUHUB_MAX_RETRIES: "3"
+    volumes:
+      - /DATA/AppData/gpuhub/data:/data    # CasaOS standart AppData dizini; başka yola da alabilirsiniz
+    networks:
+      - casaos
+
+networks:
+  casaos:
+    external: true
+# CasaOS dışı düz docker kullanıyorsanız networks/casaos bloğunu silip `network_mode: bridge` kullanın.

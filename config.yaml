@@ -1,0 +1,16 @@
+# GPUHub — optional non-sensitive defaults. Environment variables override these.
+port: 8080
+data_dir: /data
+database_path: /data/gpuhub.db
+scheduler_strategy: most_quota   # round_robin | least_used | most_quota | weighted
+rotation_strategy: most_quota    # round_robin | least_used | most_quota | weighted
+poll_interval: 5s
+scheduler_interval: 2s
+max_retries: 3
+quota_high_watermark: 0.90
+scheduler_workers: 4
+proxy_health_interval: 60s
+proxy_health_url: https://api.ipify.org?format=json
+proxy_health_timeout: 15s
+notify_webhook_url: ""
+base_url: http://localhost:8080
