@@ -158,7 +158,7 @@ paths:
                 label: { type: string }
                 credential:
                   type: string
-                  description: "opaque string or JSON, e.g. kaggle.json contents; for provider='runner': {\"base_url\":\"https://xxxx.ngrok.app\",\"token\":\"...\"}"
+                  description: "opaque string or JSON, e.g. Kaggle: {\"token\":\"KGAT_...\",\"username\":\"thesalihsimsek\"} (kaggle kernels API: push/status/output/cancel); runner: {\"base_url\":\"https://xxxx.ngrok.app\",\"token\":\"...\"}; kaggle.json {\"username\":\"...\",\"key\":\"...\"} also accepted"
                 bound_proxy_id:
                   type: integer
                   description: "OPTIONAL - id of an unbound proxy (1:1 sticky binding). Omit/0 to use direct egress."

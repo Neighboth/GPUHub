@@ -181,7 +181,7 @@ States: `queued → scheduling → running → succeeded | failed | cancelled | 
 
 | # | Provider | Free GPU tier (as advertised, verified 2026-11) | API class | Status |
 |---|---|---|---|---|
-| 1 | Kaggle Notebooks | ~30 GPU-h/week; **T4 x2 only** (16GB each - P100 retired 2026-09); 12h sessions; phone-verified | Identity REST only; no public job-submit API (NOTE) | enabled* |
+| 1 | Kaggle Notebooks | ~30 GPU-h/week; **T4 x2 only**; phone verified; 12h session cap | Full session API via `kaggle kernels` (push/status/logs/cancel, Bearer auth) | enabled |
 | 2 | Google Colab | free T4, ~12h sessions, dynamic limits | none official; unofficial runtime protocol (NOTE) | enabled* |
 | 3 | Lightning AI | ~15 free credits/month (≈75 T4 GPU-h); T4/L4/L40S/A100/H200 by account | Bearer REST (Studios) | enabled |
 | 4 | Paperspace Gradient | Free plan: **M4000 8GB** notebook GPU only (Maxwell) + C4 CPU; 6h auto-shutdown; Pro $8/mo adds P4000/RTX4000/A4000, Growth $39/mo adds A100-80G | REST (x-api-key); legacy API | enabled |
@@ -313,7 +313,7 @@ For bare metal: `cd web && npm ci && npm run build && cd .. && go build -o bin/g
 
 ## Known limitations & roadmap
 
-- Free-tier terms change often; several adapters (Kaggle/Colab/Studio Lab/ModelScope/Modal/ZeroGPU) **have no public job-submit HTTP API** - GPUHub schedules and enforces quota/failover honestly, but actual run submission for those providers goes through our **Self-hosted Runner** (deploy `examples/runner.py` inside the environment and GPUHub drives it over HTTP) or the provider's own UI/SDK (attempts are marked failed-by-design with explicit messages, and other candidates are tried).
+- Free-tier terms change often; several adapters (Colab/Studio Lab/ModelScope ZeroGPU/Modal) **have no public job-submit HTTP API** - GPUHub schedules and enforces quota/failover honestly, but actual run submission for those providers goes through our **Self-hosted Runner** (deploy `examples/runner.py` inside the environment and GPUHub drives it over HTTP) or the provider's own UI/SDK (attempts are marked failed-by-design with explicit messages, and other candidates are tried). Kaggle (kernels API), Paperspace /jobs, Lightning REST and most other enabled adapters submit jobs for real via their API.
 - Provider QUOTA endpoints: many providers don't expose remaining free quota; GPUHub meters local usage (`key_usage`, per-day/week counters) and only consumes provider-reported quota when available.
 - Live log streaming is poll-based over WebSocket (no provider websockets), 1s cadence; logs are also persisted on the job row.
 - The ~9–12h session wall of free providers (Kaggle ~12h, Colab ~12h, Studio Lab 4h) cannot be removed - `session_renew` + checkpoint/resume makes long runs survive, it does not extend quotas.

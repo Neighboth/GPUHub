@@ -164,8 +164,12 @@ func TestLogs_ReturnsBody(t *testing.T) {
 }
 
 func TestQuota_NotExposed_ReturnsEmpty(t *testing.T) {
-	p := NewKaggle() // quota path intentionally empty
-	q, err := p.Quota(context.Background(), testCred(), "")
+	p := Lookup("kaggle") // kaggle's Quota() does hit the introspect endpoint; not exposed statically, returns zeroed Quota or falls back
+	_ = p
+	// A provider with no quota endpoint configured must return a well-formed zeroed Quota, no error.
+	p2 := &apiAdapter{id: "noquota", name: "NoQuota", caps: Capabilities{GPUs: []GPU{gpu("T4", 16, 1)}},
+		baseURL: "http://127.0.0.1:0", auth: bearer}
+	q, err := p2.Quota(context.Background(), testCred(), "")
 	if err != nil {
 		t.Fatal(err)
 	}

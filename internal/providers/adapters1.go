@@ -25,22 +25,6 @@ var (
 )
 
 // --- 1. Kaggle Notebooks ---
-// Auth: JSON {"username":"...","key":"..."} (kaggle.json). Free tier: 2x T4 or P100, ~30 GPU h/week quota.
-// NOTE: No official public API for launching notebook sessions; adapter uses the documented
-// REST endpoints of the Kaggle API for identity validation and reports unsupported submits.
-func NewKaggle() *apiAdapter {
-	return &apiAdapter{
-		id: "kaggle", name: "Kaggle Notebooks", baseURL: "https://www.kaggle.com/api/v1",
-		caps: Capabilities{GPUs: []GPU{gpu("T4", 16, 2)}, MaxDurationHours: 12,
-			Frameworks: []string{"pytorch", "tensorflow", "jax"}, Notebooks: true, Docker: false, SSH: false,
-			FreeTierNotes: "30 GPU-hours/week (floating; T4 x2 16GB — only GPU, P100 retired 2026-09); phone-verified; 12h max session; /kaggle/working persists 20GB"},
-		auth:     kaggleAuth,
-		validate: "/competitions/list?page=1",
-		quota:    "", // not exposed — tracked locally by GPUHub (key_usage)
-		submit:   "", // NOTE: Kaggle has no public job-submission API; submit via UI. Sessions are notebook-only.
-	}
-}
-
 // --- 2. Google Colab ---
 // NOTE: No official API; the community uses the unofficial Jupyter protocol against a Colab runtime URL
 // obtained by the user from colab.google.com. Free tier: T4 (12h sessions) / K80 legacy.
@@ -192,7 +176,7 @@ func NewHFSpaces() *apiAdapter {
 
 func init() {
 	registerBuiltin(func() []Provider {
-		return []Provider{NewKaggle(), NewColab(), NewLightning(), NewPaperspace(), NewSaturn(),
+		return []Provider{NewColab(), NewLightning(), NewPaperspace(), NewSaturn(),
 			NewSageMakerStudioLab(), NewPaddleAIStudio(), NewModelScope(), NewCloudStudio(), NewLeafcloud(), NewHFSpaces()}
 	})
 }
