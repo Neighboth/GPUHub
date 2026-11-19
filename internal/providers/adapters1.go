@@ -70,22 +70,6 @@ func NewPaperspace() *apiAdapter {
 	}
 }
 
-// --- 5. Saturn Cloud ---
-// Auth: token from app.saturncloud.io (Authorization: Bearer). Free tier: 30 GPU-hours/month on T4.
-func NewSaturn() *apiAdapter {
-	return &apiAdapter{
-		id: "saturn", name: "Saturn Cloud", baseURL: "https://api.saturncloud.io/api/v1",
-		caps: Capabilities{GPUs: []GPU{gpu("T4", 16, 1)}, MaxDurationHours: 4,
-			Frameworks: []string{"pytorch", "tensorflow", "dask"}, Notebooks: true, Docker: true, SSH: true,
-			FreeTierNotes: "Hosted Free: 150 shared GPU+CPU hours/month (T4 16GB only); JupyterLab/RStudio/SSH/Dask; no card; idle auto-shutdown"},
-		auth:     bearer,
-		validate: "/users/me/",
-		submit:   "/jupyter-servers/",
-		status:   func(id string) string { return "/jupyter-servers/" + id + "/" },
-		cancel:   func(id string) string { return "/jupyter-servers/" + id + "/stop/" },
-	}
-}
-
 // --- 6. Amazon SageMaker Studio Lab ---
 // NOTE: Studio Lab has no public job API. Free tier: 4 GPU-hours/session, T4 or G4dn. Sessions via UI only.
 // Auth: none usable via API; credential is treated as a session cookie/token for manual bookkeeping only.

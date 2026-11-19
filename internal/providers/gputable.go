@@ -12,6 +12,9 @@ var GPUCatalog = map[string]int{
 	"H200":       141,
 	"L4":         24,
 	"L40S":       48,
+	"A6000":      48,
+	"A16":        20,
+	"RTX5090":    32,
 	"RTX4090":    24,
 	"RTX6000Ada": 48,
 	"RTX6000Pro": 96, // RTX PRO 6000 Blackwell - HF ZeroGPU backing hardware (48GB large / 96GB xlarge)

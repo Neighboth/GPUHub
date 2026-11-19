@@ -138,10 +138,8 @@ func splitKaggleRef(id RemoteJobID) (user, slug string, ok bool) {
 }
 
 func (k *kaggleAdapter) Submit(ctx context.Context, cred Credential, _ string, job JobSpec) (RemoteJobID, error) {
-	user, err := k.resolveUsername(ctx, cred)
-	if err != nil {
-		return "", err
-	}
+	// No username needed for submission: kernels/push authenticates with the Bearer token alone.
+	// (Previously this called resolveUsername which pushed a throwaway probe kernel on every submit — removed.)
 	title := fmt.Sprintf("gpuhub-%d", time.Now().Unix())
 	body := map[string]any{
 		"newTitle":       title,
@@ -180,7 +178,6 @@ func (k *kaggleAdapter) Submit(ctx context.Context, cred Credential, _ string, j
 	if len(parts) < 2 {
 		return "", fmt.Errorf("kaggle kernel push returned unparsable ref %q", u)
 	}
-	_ = user
 	return RemoteJobID(parts[0] + "/" + parts[1]), nil
 }
 

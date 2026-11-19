@@ -185,14 +185,14 @@ States: `queued → scheduling → running → succeeded | failed | cancelled | 
 | 2 | Google Colab | free T4, ~12h sessions, dynamic limits | none official; unofficial runtime protocol (NOTE) | enabled* |
 | 3 | Lightning AI | ~15 free credits/month (≈75 T4 GPU-h); T4/L4/L40S/A100/H200 by account | Bearer REST (Studios) | enabled |
 | 4 | Paperspace Gradient | Free plan: **M4000 8GB** notebook GPU only (Maxwell) + C4 CPU; 6h auto-shutdown; Pro $8/mo adds P4000/RTX4000/A4000, Growth $39/mo adds A100-80G | REST (x-api-key); legacy API | enabled |
-| 5 | Saturn Cloud | **150 GPU+CPU hours/month** (shared, T4 16GB only); JupyterLab/SSH/Dask; auto-shutdown when idle | Bearer REST | enabled |
+| 5 | Saturn Cloud | **150 GPU+CPU hours/month** (shared pool); JupyterLab/SSH/Dask; auto-shutdown when idle | SuperHub REST at `app.community.saturnenterprise.io`; Bearer token; Submit = create Job (`g4dnxlarge` T4 etc.) - verified live | enabled |
 | 6 | SageMaker Studio Lab | **CLOSED to new customers since 2026-07** - replaced by SageMaker Free Tier (250 CPU-h/mo); T4 sessions for legacy accounts | none (UI-only) | disabled - NOTE |
 | 7 | Paddle AI Studio (Baidu) | V100 16GB activations, ~12h/day cap; Baidu phone account | Bearer REST (`/user/info`); submit UI-only (NOTE) | enabled* |
 | 8 | ModelScope (Alibaba) | 36h one-time NVIDIA A10 24GB (10h/run) + **100h AMD MI300X 192GB** via AMD Developer Program (ROCm) | SDK-token; REST for identity only (NOTE) | enabled* |
 | 9 | Tencent CloudStudio | ~10000 free GPU-minutes/month (T4 16GB, region-dependent); real-name account | token REST (NOTE) | enabled* |
 | 10 | Leafcloud | free research-credit GPU program (T4/L4) | Bearer REST `/instances` | enabled |
 | 11 | Hugging Face Spaces (ZeroGPU) | shared **NVIDIA RTX PRO 6000 Blackwell**, free 5 GPU-min/day (~3 runs); large=48GB (1×quota) / xlarge=96GB (2×quota); 24h reset; Gradio only, 60s/call | Bearer REST `/whoami-v2`; ZeroGPU attach is code-level (NOTE) | enabled* |
-| 12 | Modal | **$30/mo Starter compute credits**; 11 GPU SKUs: T4 16G, L4 24G, A10 24G, L40S 48G, A100 40/80G, RTX PRO 6000 96G, H100 80G, H200 141G, B200 180G, B300 288G | token auth; **no public REST submit** - use `modal run` SDK (NOTE) | enabled* |
+| 12 | Modal | **$30/mo Starter compute credits**; 11 GPU SKUs: T4 16G, L4 24G, A10 24G, L40S 48G, A100 40/80G, RTX PRO 6000 96G, H100 80G, H200 141G, B200 180G, B300 288G | `{"id":"ak-...","secret":"as-..."}` from `modal token new`; **no public REST submit** - deploy `examples/modal_runner.py` in your Modal account and use Self-hosted Runner to run jobs there (NOTE) | enabled* |
 | 13 | Beam | free monthly container allowance, T4/L4 | Bearer REST `/containers` (inferred) | enabled |
 | 14 | Intel Tiber AI Cloud | free Gaudi2 96GB developer program | Bearer REST; OpenShift notebooks (NOTE) | enabled* |
 | 15 | Genesis Cloud | **trial credit only, no permanent free GPU** | REST | disabled - NOTE |
@@ -246,6 +246,18 @@ GPUHub ships a **generic runner** (`examples/runner.py`, ~250 lines, **stdlib-on
 **~9h session wall:** Free providers kill sessions (Kaggle ~12h, Colab ~12h, Studio Lab 4h). GPUHub can't change a provider's limit - but it makes it survivable: set `session_renew: true`, and when the session dies unexpectedly the job is automatically re-queued on the next eligible key; the payload sees `GPUHUB_ATTEMPT=<n>` and `GPUHUB_RESUME=1` - write your trainer to load `checkpoint.pt` when `RESUME=1` (the shipped `examples/runner.py` passes these through; a torch trainer with ~10 lines of save/load logic survives multi-session runs). Kaggle's 30 GPU-hours/week still caps total work - renewal ≠ quota bypass.
 
 **Runner protocol (for anything calling GPUHub):** `GET /health`, `POST /jobs`, `GET /jobs/{id}`, `GET /jobs/{id}/logs`, `POST /jobs/{id}/cancel`, auth `Bearer <token>`. The protocol is deliberately trivial - any language can implement it.
+
+### Modal Runner - drive your own Modal account from GPUHub
+
+Modal has **no public job-submit REST API** (checked Nov 2026 against the modal 1.6.4 SDK: the control plane is gRPC-only). But you can host the runner **inside your Modal account** and GPUHub will schedule real GPU jobs onto Modal's $30/month free compute:
+
+1. `pip install modal fastapi pynvml` and `modal token new` (this pair is your Modal credential).
+2. `modal deploy examples/modal_runner.py` - prints a URL like `https://<workspace>--gpuhub-runner.modal.run`.
+3. (Optional) harden it: set a `gpuhub-runner-token` Modal secret with `GPUHUB_RUNNER_TOKEN=<random>` and the same value into GPUHub's runner key credential.
+4. Providers → Self-hosted Runner → Add key: `{"base_url":"https://<workspace>--gpuhub-runner.modal.run","token":"<GPUHUB_RUNNER_TOKEN>"}`.
+5. Add your Modal credential to the **Modal** provider too (`{"id":"ak-...","secret":"as-..."}`) so GPUHub tracks it - job submission attempts against Modal itself fail by design with a clear message and fail over (this is honest: GPUHub will not pretend Modal jobs run via a fake API).
+
+Choose `gpu="T4"` (default in the file; override with env `GPUHUB_MODAL_GPU=A10G` etc.) to stay inside the $30/month free compute budget (~50 T4 hours; T4 is the cheapest Modal GPU at ~$0.59/h).
 
 ## REST API
 

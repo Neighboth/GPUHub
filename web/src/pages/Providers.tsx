@@ -177,15 +177,25 @@ export default function Providers() {
 
   const credentialHint = keyModalFor?.id === 'runner'
     ? L(lang, {
-        en: 'Self-hosted Runner credential: {"base_url":"https://xxxx.ngrok.app","token":"…"} - start examples/runner.py in any GPU environment.',
-        tr: 'Self-hosted Runner credential: {"base_url":"https://xxxx.ngrok.app","token":"…"} - örnek examples/runner.py dosyasını herhangi bir GPU ortamında başlatın.',
+        en: 'Self-hosted Runner credential: {"base_url":"https://xxxx.ngrok.app","token":"…"} - start examples/runner.py in any GPU environment, or examples/modal_runner.py inside your Modal account.',
+        tr: 'Self-hosted Runner credential: {"base_url":"https://xxxx.ngrok.app","token":"…"} - examples/runner.py dosyasını herhangi bir GPU ortamında başlatın (veya Modal hesabınızda examples/modal_runner.py).',
       })
     : keyModalFor?.id === 'kaggle'
       ? L(lang, {
-          en: 'Kaggle API token: {"token":"KGAT_…"} (recommended — works with Bearer) or legacy kaggle.json {"username":"…","key":"…"}',
+          en: 'Kaggle API token: {"token":"KGAT_…"} (recommended - works with Bearer) or legacy kaggle.json {"username":"…","key":"…"}',
           tr: 'Kaggle API token\'ı: {"token":"KGAT_…"} (önerilen, Bearer ile çalışır) veya klasik kaggle.json {"username":"…","key":"…"}',
         })
-      : L(lang, { en: 'Token or JSON credential (see README for this provider).', tr: 'Token veya JSON credential (sağlayıcıya göre README\'ye bakın).' });
+      : keyModalFor?.id === 'modal'
+        ? L(lang, {
+            en: 'Modal credential: {"id":"ak-…","secret":"as-…"} - both tokens from `modal token new`. NOTE: Modal has no public job REST API; deploy examples/modal_runner.py to your Modal account and use Self-hosted Runner to run jobs on Modal compute.',
+            tr: 'Modal credential: {"id":"ak-…","secret":"as-…"} - iki token da `modal token new` komutundan alınır. NOT: Modal public job REST API sunmaz; Modal üzerinde iş çalıştırmak için examples/modal_runner.py dosyasını Modal hesabınıza deploy edin ve Self-hosted Runner ile bağlayın.',
+          })
+        : keyModalFor?.id === 'saturn'
+          ? L(lang, {
+              en: 'Saturn Cloud credential: {"token":"…"} - Bearer access token from your Saturn Cloud instance (free community token at app.community.saturnenterprise.io). 150 free GPU+CPU hours/month on Hosted Free.',
+              tr: 'Saturn Cloud credential: {"token":"…"} - Saturn Cloud hesabınızın Bearer access token\'ı (ücretsiz topluluk tokeni app.community.saturnenterprise.io üzerinden alınır). Hosted Free planında ayda 150 ücretsiz GPU+CPU saati.',
+            })
+          : L(lang, { en: 'Token or JSON credential (see README for this provider).', tr: 'Token veya JSON credential (sağlayıcıya göre README\'ye bakın).' });
 
   return (
     <div className="space-y-6">

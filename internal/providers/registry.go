@@ -6,6 +6,12 @@ var builtins []func() []Provider
 
 func registerBuiltin(f func() []Provider) { builtins = append(builtins, f) }
 
+// BaseURLOverride exposes the test-time base URL override (used by custom adapters).
+func BaseURLOverride(id string) (string, bool) {
+	u, ok := baseURLOverrides[id]
+	return u, ok && u != ""
+}
+
 // baseURLOverrides lets tests point adapters at mock servers. Not used in production.
 var baseURLOverrides = map[string]string{}
 

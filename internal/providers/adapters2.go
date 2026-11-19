@@ -1,32 +1,7 @@
 package providers
 
-// Part 2: Modal, Beam, Intel Tiber, Genesis, Anyscale, JarvisLabs, Nebius, Hyperbolic, Salad, RunPod.
-
-// --- 12. Modal ---
-// Auth: Modal token id+secret {"token_id":"...","token_secret":"..."}. Free tier: $30/month free credits (compute, incl. A10G/T4/H100).
-// API: Modal's public REST surface is via the modal SDK; direct REST submit isn't officially documented.
-// NOTE: Adapter validates token shape and reports submit via SDK (modal run). Direct HTTP submit not public.
-func NewModal() *apiAdapter {
-	return &apiAdapter{
-		id: "modal", name: "Modal", baseURL: "https://api.modal.com/v1",
-		caps: Capabilities{GPUs: []GPU{
-			gpu("T4", 16, 8), gpu("L4", 24, 8), gpu("A10", 24, 8), gpu("L40S", 48, 8),
-			gpu("A100", 40, 8), gpu("A100", 80, 8), gpu("RTX6000Pro", 96, 8),
-			gpu("H100", 80, 8), gpu("H200", 141, 8), gpu("B200", 180, 8), gpu("B300", 288, 8),
-		}, MaxDurationHours: 24,
-			Frameworks: []string{"pytorch", "tensorflow", "jax"}, Notebooks: false, Docker: true, SSH: false,
-			FreeTierNotes: "$30/month free compute credits (Starter, no card). 11 GPU SKUs: T4 16G, L4 24G, A10 24G, L40S 48G, A100 40/80G, RTX PRO 6000 96G, H100 80G, H200 141G, B200 180G, B300 288G. $0.59–7.10/GPU-hr; per-second billing"},
-		auth: func(p CredentialPayload) (string, string) {
-			id := p.Username
-			if p.Extra != nil && p.Extra["token_id"] != "" {
-				id = p.Extra["token_id"]
-			}
-			return "Authorization", "Token " + basicEncode(id, firstToken(p))
-		},
-		validate: "/whoami",
-		submit:   "", // NOTE: submit via `modal run` SDK; no public REST job endpoint
-	}
-}
+// Part 2: Beam, Intel Tiber, Genesis, Anyscale, JarvisLabs, Nebius, Hyperbolic, Salad, RunPod.
+// (Modal lives in modal_runner_adapter.go — it registers itself via its own init.)
 
 // --- 13. Beam ---
 // Auth: Beam token (Bearer). Free tier: free monthly hour allowance on T4/A10G for running containers.
@@ -171,7 +146,7 @@ func NewRunPod() *apiAdapter {
 
 func init() {
 	registerBuiltin(func() []Provider {
-		return []Provider{NewModal(), NewBeam(), NewIntelTiber(), NewGenesis(), NewAnyscale(),
+		return []Provider{NewBeam(), NewIntelTiber(), NewGenesis(), NewAnyscale(),
 			NewJarvisLabs(), NewNebius(), NewHyperbolic(), NewSalad(), NewRunPod()}
 	})
 }
