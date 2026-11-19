@@ -164,13 +164,18 @@ func (s *saturnAdapter) Submit(ctx context.Context, cred Credential, _ string, j
 		}
 	}
 	script := scriptForSaturn(job)
+	// Saturn JobCreate: `command` is the primary command (REQUIRED, non-empty);
+	// `start_script` is a shell script run before it. Saturn requires `command` to be
+	// a short shell command string; embedding a multi-line script there can lead to a
+	// job that is created but never schedules a pod. Put the payload in start_script
+	// and use a simple `bash <script-file>` style command instead.
+	command := "bash /tmp/gpuhub-job.sh"
 	body := map[string]any{
-		"name":           name,
-		"instance_size":  instanceSize,
-		"image_uri":      image,
-		"ide":            "jupyter",
-		"start_script":   script,
-		"auto_shutoff":   "6 hours",
+		"name":          name,
+		"instance_size": instanceSize,
+		"image_uri":     image,
+		"command":       command,
+		"start_script":  "#!/bin/bash\ncat > /tmp/gpuhub-job.sh <<'GPUHUB_EOF'\n" + script + "\nGPUHUB_EOF\nchmod +x /tmp/gpuhub-job.sh\n",
 		"environment_variables": map[string]string{
 			"GPUHUB_GPU_TYPE": job.GPUType,
 			"GPUHUB_MIN_VRAM_GB": fmt.Sprint(job.MinVRAMGB),
@@ -197,6 +202,10 @@ func (s *saturnAdapter) Submit(ctx context.Context, cred Credential, _ string, j
 		return RemoteJobID(nested.Job.ID), nil
 	}
 	return "", fmt.Errorf("saturn job create returned unmappable body: %s", truncate(string(b), 200))
+}
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
 }
 
 func scriptForSaturn(job JobSpec) string {
