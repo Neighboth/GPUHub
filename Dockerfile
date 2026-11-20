@@ -20,9 +20,13 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/gpuhub ./cmd/gpuhu
 
 # --- Stage 3: runtime ---
 FROM alpine:3.20
-RUN apk add --no-cache python3 py3-pip \
+RUN apk add --no-cache python3 py3-pip chromium \
 	&& addgroup -S gpuhub && adduser -S gpuhub -G gpuhub \
 	&& mkdir -p /data && chown gpuhub:gpuhub /data
+# Real provider runtimes: Modal SDK (gRPC) + Playwright for Colab web login.
+# Installed system-wide so the gpuhub user can import them.
+RUN pip3 install --no-cache-dir --break-system-packages modal playwright \
+	&& python3 -m playwright install --with-deps chromium 2>/dev/null || true
 USER gpuhub
 WORKDIR /app
 COPY --from=gobuild /out/gpuhub /app/gpuhub

@@ -76,15 +76,30 @@ def api_modal(req, action):
     env = dict(os.environ, MODAL_TOKEN_ID=tid, MODAL_TOKEN_SECRET=secret)
     job = req.get("id", "")
     if action == "validate":
-        code = "import modal; print(modal.__version__)"
+        # Real authentication check against Modal's gRPC control plane using the
+        # supplied tokens (not just `import modal`). modal.Volume.list performs an
+        # authenticated RPC and works for any valid workspace token.
+        code = ("import modal\n"
+                "with modal.Client() as c:\n"
+                "    modal.Volume.list(client=c)\n"
+                "print('MODAL_AUTH_OK')")
         r = subprocess.run([sys.executable, "-c", code], capture_output=True,
-                           text=True, timeout=60, env=env)
-        return {"ok": True, "sdk": True} if r.returncode == 0 else None
+                           text=True, timeout=90, env=env)
+        if r.returncode == 0 and "MODAL_AUTH_OK" in r.stdout:
+            return {"ok": True, "sdk": True}
+        return {"error": "Modal auth failed: " + (r.stderr or r.stdout)[-400:]}
     if action == "submit":
         # Deploy the shipped runner into the user's Modal account via SDK.
-        helper = os.path.join(os.path.dirname(os.path.abspath(__file__)), "modal_runner.py")
-        if not os.path.exists(helper):
-            return None
+        helper = ""
+        for cand in [os.path.join(os.path.dirname(os.path.abspath(__file__)), "modal_runner.py"),
+                     os.path.join(os.path.dirname(os.path.abspath(__file__)), "examples", "modal_runner.py"),
+                     os.path.join(os.getcwd(), "examples", "modal_runner.py"),
+                     "/app/examples/modal_runner.py"]:
+            if os.path.exists(cand):
+                helper = cand
+                break
+        if not helper:
+            return {"error": "examples/modal_runner.py bulunamadi"}
         r = subprocess.run([sys.executable, "-m", "modal", "deploy", helper],
                            capture_output=True, text=True, timeout=600, env=env)
         if r.returncode != 0:

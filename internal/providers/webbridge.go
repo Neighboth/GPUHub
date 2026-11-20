@@ -193,11 +193,13 @@ func (w *webbridgeAdapter) ID() string            { return w.id }
 func (w *webbridgeAdapter) Name() string          { return w.name }
 func (w *webbridgeAdapter) Capabilities() Capabilities { return w.caps }
 
-// ValidateKey is a pure credential-shape check - it NEVER needs Python or a
-// network call. This removes the "web bridge (colab/validate) failed: exit
-// status 1" class of errors entirely (the helper's stdout error was previously
-// swallowed, producing an empty "exit status 1:" message).
-func (w *webbridgeAdapter) ValidateKey(ctx context.Context, cred Credential, _ string) error {
+// ValidateKey performs a REAL validation: it calls the Python bridge (Modal SDK
+// / hidden Colab API / Playwright login) when a Python runtime is available.
+// Previously this was shape-only and returned "OK" instantly even when the
+// credentials were dead or the SDK was missing - misleading. When Python is
+// absent we report that validation cannot run, instead of faking OK.
+func (w *webbridgeAdapter) ValidateKey(ctx context.Context, cred Credential, proxyURL string) error {
+	// Fast-fail on obviously malformed credentials before spawning Python.
 	c, err := parseWebCred(cred.Raw)
 	if err != nil {
 		return err
@@ -209,12 +211,21 @@ func (w *webbridgeAdapter) ValidateKey(ctx context.Context, cred Credential, _ s
 		if !strings.HasPrefix(c.Secret, "as-") || len(c.Secret) < 12 {
 			return fmt.Errorf("Modal credential secret must start with 'as-' (from `modal token new`)")
 		}
-	} else {
-		if c.Username == "" || c.Password == "" {
-			return fmt.Errorf("%s credential must be {\"username\":\"...\",\"password\":\"...\"} - both boxes required", w.name)
-		}
+	} else if c.Username == "" || c.Password == "" {
+		return fmt.Errorf("%s credential must be {\"username\":\"...\",\"password\":\"...\"} - both boxes required", w.name)
 	}
-	return nil
+
+	// Real end-to-end validation through the bridge.
+	if py, err := exec.LookPath("python"); err == nil {
+		_ = py
+		_, err = w.callBridge(ctx, cred, "validate", nil)
+		return err
+	}
+	if _, err := exec.LookPath("python3"); err == nil {
+		_, err = w.callBridge(ctx, cred, "validate", nil)
+		return err
+	}
+	return fmt.Errorf("cannot validate %s: python3 not installed in GPUHub image (install python3 + modal/playwright); format is valid but NOT verified", w.name)
 }
 
 func (w *webbridgeAdapter) ListGPUs(ctx context.Context, cred Credential, _ string) ([]GPU, error) {
