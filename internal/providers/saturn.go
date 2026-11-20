@@ -246,10 +246,24 @@ func (s *saturnAdapter) Status(ctx context.Context, cred Credential, _ string, i
 		state = "queued"
 	case "running", "active":
 		state = "running"
-	case "stopped", "terminated", "complete", "completed":
-		state = "succeeded"
 	case "failed", "error":
 		state = "failed"
+	case "stopped", "terminated":
+		// Saturn uses "stopped" for BOTH a finished job and a job that never got
+		// a pod (e.g. quota 0 / UPGRADE_TO_PRO). Check history: no pods => failed,
+		// otherwise succeeded. This prevents fake "succeeded" jobs with no output.
+		hb, herr := s.do(ctx, cred, http.MethodGet, "/api/jobs/"+string(id)+"/history", nil)
+		if herr == nil {
+			var hist struct {
+				Pods []any `json:"pods"`
+			}
+			if json.Unmarshal(hb, &hist) == nil && len(hist.Pods) == 0 {
+				return JobStatus{State: "failed", Message: "Saturn job durdu ama hiç pod calismadi (kota/limit?)", Raw: string(b)}, nil
+			}
+		}
+		state = "succeeded"
+	case "complete", "completed":
+		state = "succeeded"
 	}
 	return JobStatus{State: state, Message: probe.Runtime.Message, Raw: string(b)}, nil
 }

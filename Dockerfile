@@ -20,11 +20,11 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/gpuhub ./cmd/gpuhu
 
 # --- Stage 3: runtime ---
 FROM alpine:3.20
-RUN apk add --no-cache python3 py3-pip chromium \
+# nodejs is REQUIRED by the Playwright python driver (its bundled driver is JS).
+RUN apk add --no-cache python3 py3-pip chromium nodejs npm \
 	&& addgroup -S gpuhub && adduser -S gpuhub -G gpuhub \
 	&& mkdir -p /data && chown gpuhub:gpuhub /data
 # Real provider runtimes: Modal SDK (gRPC) + Playwright for Colab web login.
-# Installed system-wide so the gpuhub user can import them.
 RUN pip3 install --no-cache-dir --break-system-packages modal playwright \
 	&& python3 -m playwright install --with-deps chromium 2>/dev/null || true
 USER gpuhub
@@ -35,7 +35,8 @@ COPY config.yaml /app/config.yaml
 COPY examples/ /app/examples/
 ENV GPUHUB_OPENAPI_PATH=/app/docs/openapi.yaml \
     GPUHUB_DATA_DIR=/data \
-    GPUHUB_DB_PATH=/data/gpuhub.db
+    GPUHUB_DB_PATH=/data/gpuhub.db \
+    PLAYWRIGHT_NODEJS_PATH=/usr/bin/node
 EXPOSE 8080
 VOLUME ["/data"]
 ENTRYPOINT ["/app/gpuhub"]

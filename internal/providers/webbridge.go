@@ -143,6 +143,12 @@ func (w *webbridgeAdapter) callBridge(ctx context.Context, cred Credential, acti
 	}
 	cmd := exec.CommandContext(ctx, py, helper)
 	cmd.Stdin = strings.NewReader(string(body))
+	// Ensure the Playwright python driver can find Node.js even on slim images.
+	if os.Getenv("PLAYWRIGHT_NODEJS_PATH") == "" {
+		if p, err := exec.LookPath("node"); err == nil {
+			cmd.Env = append(os.Environ(), "PLAYWRIGHT_NODEJS_PATH="+p)
+		}
+	}
 	var out, errb strings.Builder
 	cmd.Stdout = &out
 	cmd.Stderr = &errb

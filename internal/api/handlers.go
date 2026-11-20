@@ -419,7 +419,15 @@ func (s *Server) handleTestProvider(w http.ResponseWriter, r *http.Request) {
 	}
 	rows.Close()
 	if len(keyIDs) == 0 {
-		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "no active keys for provider"})
+		// Distinguish "no keys at all" from "keys exist but all disabled" so the
+		// UI message matches the provider card's key count.
+		var total int
+		_ = s.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM provider_keys WHERE provider_id=?`, providerID).Scan(&total)
+		msg := "no active keys for provider"
+		if total > 0 {
+			msg = fmt.Sprintf("%d key(s) tanımlı ama hiçbiri aktif değil - Keys sayfasından açın", total)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": msg})
 		return
 	}
 	results := []map[string]any{}
