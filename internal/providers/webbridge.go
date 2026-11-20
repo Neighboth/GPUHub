@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +12,13 @@ import (
 	"path/filepath"
 	"strings"
 )
+
+// webBridgePy is embedded so the helper is ALWAYS available, including inside
+// the Docker/Alpine image where /app/examples is not copied (the earlier
+// "web bridge helper examples/web_bridge.py not found" error).
+//
+//go:embed web_bridge.py
+var webBridgePy string
 
 // webbridgeAdapter bridges providers that have NO public job-submit REST API by
 // using the user's WEB credentials (username/password). Strategy, in order:
@@ -102,23 +110,32 @@ func (w *webbridgeAdapter) callBridge(ctx context.Context, cred Credential, acti
 	}
 	body, _ := json.Marshal(req)
 
-	// Locate helper next to the running binary, then repo examples/ dir, then cwd.
-	candidates := []string{
+	// Write the embedded helper to a temp file. This ALWAYS works (Docker/Alpine
+	// included) and removes the old "helper not found" failure. Prefer an on-disk
+	// copy if one exists (e.g. a developer editing examples/web_bridge.py live).
+	helper := ""
+	for _, p := range []string{
 		filepath.Join("examples", "web_bridge.py"),
 		filepath.Join(filepath.Dir(os.Args[0]), "examples", "web_bridge.py"),
-	}
-	helper := ""
-	for _, p := range candidates {
+	} {
 		if _, err := os.Stat(p); err == nil {
 			helper = p
 			break
 		}
 	}
 	if helper == "" {
-		return nil, fmt.Errorf("web bridge helper examples/web_bridge.py not found (searched %v)", candidates)
+		tmp := filepath.Join(os.TempDir(), "gpuhub-web-bridge.py")
+		if err := os.WriteFile(tmp, []byte(webBridgePy), 0o600); err != nil {
+			return nil, fmt.Errorf("cannot materialize embedded web bridge: %w", err)
+		}
+		helper = tmp
 	}
 
-	cmd := exec.CommandContext(ctx, "python", helper)
+	py := "python"
+	if _, err := exec.LookPath(py); err != nil {
+		py = "python3"
+	}
+	cmd := exec.CommandContext(ctx, py, helper)
 	cmd.Stdin = strings.NewReader(string(body))
 	var out, errb strings.Builder
 	cmd.Stdout = &out

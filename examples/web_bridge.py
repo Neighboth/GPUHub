@@ -37,6 +37,8 @@ def fail(msg):
 
 def api_colab(req, action):
     """Try the official google-colab-cli (OAuth; cached token) before Playwright."""
+    if action == "quota":
+        return {"raw": "Google Colab free T4 - dynamic weekly allowance, resets automatically; no fixed quota API"}
     from shutil import which
     if not which("colab"):
         return None
@@ -101,6 +103,8 @@ def api_modal(req, action):
         with urllib.request.urlopen(rq, timeout=120) as resp:
             out = json.loads(resp.read().decode())
         return {"id": out.get("id", "modal-deployed"), "sdk": True, "url": url}
+    if action == "quota":
+        return {"raw": "$30/month recurring compute credit (Modal Starter); no REST balance endpoint"}
     if action in ("status", "logs", "cancel"):
         return None  # SDK has no cross-deploy job lookup here; fall through
     return None

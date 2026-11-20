@@ -27,6 +27,7 @@ WORKDIR /app
 COPY --from=gobuild /out/gpuhub /app/gpuhub
 COPY docs/openapi.yaml /app/docs/openapi.yaml
 COPY config.yaml /app/config.yaml
+COPY examples/ /app/examples/
 ENV GPUHUB_OPENAPI_PATH=/app/docs/openapi.yaml \
     GPUHUB_DATA_DIR=/data \
     GPUHUB_DB_PATH=/data/gpuhub.db

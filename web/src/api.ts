@@ -393,6 +393,10 @@ async function addProviderKey(providerId: string, body: AddingKeyBody): Promise<
   return request(`/providers/${encodeURIComponent(providerId)}/keys`, { method: 'POST', body });
 }
 
+async function revealKey(keyId: string | number): Promise<{ credential: string }> {
+  return request(`/keys/${encodeURIComponent(String(keyId))}/reveal`, { method: 'POST', body: {} }) as Promise<{ credential: string }>;
+}
+
 async function testProvider(id: string, keyId?: string): Promise<unknown> {
   return request(`/providers/${encodeURIComponent(id)}/test`, {
     method: 'POST',
@@ -668,6 +672,7 @@ export const api = {
   providers,
   updateProvider,
   addProviderKey,
+  revealKey,
   testProvider,
   providerQuota,
   proxies,

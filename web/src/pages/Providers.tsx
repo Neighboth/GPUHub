@@ -13,7 +13,6 @@ import {
 import {
   api,
   errorMessage,
-  resultSummary,
   providerKeyCount,
   providerCapabilities,
   type Provider,
@@ -52,7 +51,7 @@ function credentialFieldsFor(providerId: string): CredField[] {
     case 'kaggle':
       return [
         { key: 'token', label: { en: 'API token (KGAT_…)', tr: 'API token (KGAT_…)' }, placeholder: 'KGAT_…', secret: true },
-        { key: 'username', label: { en: 'Kaggle username (optional)', tr: 'Kaggle kullanıcı adı (opsiyonel)' }, placeholder: 'thesalihsimsek' },
+        { key: 'username', label: { en: 'Kaggle username (optional)', tr: 'Kaggle kullanıcı adı (opsiyonel)' }, placeholder: 'kullanici-adiniz' },
       ];
     case 'colab':
       return [
@@ -88,6 +87,49 @@ function credentialFieldsFor(providerId: string): CredField[] {
   }
 }
 
+/** Render quota/test payloads as itemized rows (never a raw JSON blob). */
+function ItemizedResult({ data }: { data: unknown }) {
+  const rows: { label: string; value: string; tone?: 'ok' | 'bad' }[] = [];
+  const obj = (data ?? {}) as Record<string, unknown>;
+  const items = (obj.keys ?? obj.results) as unknown[] | undefined;
+  if (Array.isArray(items)) {
+    items.forEach((it, i) => {
+      const r = (it ?? {}) as Record<string, unknown>;
+      const name = String(r.label ?? r.key_label ?? r.provider_id ?? `#${i + 1}`);
+      if ('ok' in r) {
+        rows.push({ label: name, value: r.ok ? 'OK' : String(r.error ?? 'Failed'), tone: r.ok ? 'ok' : 'bad' });
+      } else if ('quota' in r) {
+        const q = (r.quota ?? {}) as Record<string, unknown>;
+        const used = q.daily_used ?? q.DailyUsed ?? 0;
+        const limit = q.daily_limit ?? q.DailyLimit ?? 0;
+        rows.push({ label: name, value: `used ${String(used)} / limit ${String(limit)}` + (q.raw ? ` - ${String(q.raw)}` : '') });
+      } else if ('error' in r) {
+        rows.push({ label: name, value: String(r.error), tone: 'bad' });
+      } else {
+        rows.push({ label: name, value: Object.entries(r).map(([k, v]) => `${k}=${String(v)}`).join(', ') });
+      }
+    });
+  } else if (typeof obj === 'object') {
+    Object.entries(obj).forEach(([k, v]) => {
+      if (v && typeof v === 'object') rows.push({ label: k, value: JSON.stringify(v) });
+      else rows.push({ label: k, value: String(v) });
+    });
+  } else {
+    rows.push({ label: 'Result', value: String(data) });
+  }
+  if (rows.length === 0) return <p className="text-sm text-zinc-500">No data.</p>;
+  return (
+    <div className="divide-y divide-zinc-800/80">
+      {rows.map((r, i) => (
+        <div key={i} className="flex items-start justify-between gap-4 py-2 text-xs">
+          <span className="font-medium text-zinc-300">{r.label}</span>
+          <span className={`max-w-[70%] text-right break-words ${r.tone === 'ok' ? 'text-emerald-400' : r.tone === 'bad' ? 'text-red-400' : 'text-zinc-400'}`}>{r.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function Providers() {
   const toast = useToast();
   const lang = useLang();
@@ -114,7 +156,12 @@ export default function Providers() {
   const [quotaLoading, setQuotaLoading] = useState(false);
   const [quotaError, setQuotaError] = useState('');
 
-  const [testingId, setTestingId] = useState<string | null>(null);
+  // Test results modal state (itemized per key, never raw JSON)
+  const [testFor, setTestFor] = useState<Provider | null>(null);
+  const [testData, setTestData] = useState<unknown>(null);
+  const [testLoading, setTestLoading] = useState(false);
+  const [testError, setTestError] = useState('');
+
   const [toggleBusy, setToggleBusy] = useState<string | null>(null);
 
   const load = useCallback((spin = true) => {
@@ -155,19 +202,15 @@ export default function Providers() {
   }
 
   function onTest(p: Provider) {
-    setTestingId(p.id);
+    setTestFor(p);
+    setTestData(null);
+    setTestError('');
+    setTestLoading(true);
     api
       .testProvider(p.id)
-      .then((res) => {
-        const summary = resultSummary(res);
-        const ok = typeof res === 'object' && res !== null && ((res as { ok?: boolean }).ok ?? (res as { results?: { ok: boolean }[] }).results?.every((r) => r.ok));
-        toast(
-          lang === 'tr' ? `${p.name}: ${summary || 'Test tamamlandı'}` : `${p.name}: ${summary || 'Test done'}`,
-          ok === false ? 'error' : 'success',
-        );
-      })
-      .catch((e) => toast(`${p.name}: ${errorMessage(e, lang === 'tr' ? 'Test başarısız' : 'Test failed')}`, 'error'))
-      .finally(() => setTestingId(null));
+      .then(setTestData)
+      .catch((e) => setTestError(errorMessage(e, lang === 'tr' ? 'Test başarısız' : 'Test failed')))
+      .finally(() => setTestLoading(false));
   }
 
   function openKeyModal(p: Provider) {
@@ -307,7 +350,7 @@ export default function Providers() {
                     <Button size="sm" variant="primary" onClick={() => openKeyModal(p)}>
                       <Plus size={13} /> {L(lang, { en: 'Add key', tr: 'Anahtar ekle' })}
                     </Button>
-                    <Button size="sm" variant="secondary" onClick={() => onTest(p)} loading={testingId === p.id}>
+                    <Button size="sm" variant="secondary" onClick={() => onTest(p)}>
                       <FlaskConical size={13} /> {L(lang, { en: 'Test', tr: 'Test' })}
                     </Button>
                     <Button size="sm" variant="secondary" onClick={() => openQuota(p)}>
@@ -416,9 +459,23 @@ export default function Providers() {
         ) : quotaError ? (
           <ErrorBlock message={quotaError} onRetry={() => quotaFor && openQuota(quotaFor)} />
         ) : (
-          <pre className="max-h-96 overflow-auto rounded-lg border border-zinc-800 bg-zinc-950 p-3 text-[11px] leading-relaxed text-zinc-300">
-            {JSON.stringify(quotaData, null, 2)}
-          </pre>
+          <ItemizedResult data={quotaData} />
+        )}
+      </Modal>
+
+      {/* Test results modal - itemized per key */}
+      <Modal
+        open={!!testFor}
+        onClose={() => setTestFor(null)}
+        title={testFor ? L(lang, { en: `Test - ${testFor.name}`, tr: `Test - ${testFor.name}` }) : ''}
+        footer={<Button variant="ghost" onClick={() => setTestFor(null)}>{L(lang, { en: 'Close', tr: 'Kapat' })}</Button>}
+      >
+        {testLoading ? (
+          <LoadingBlock label={L(lang, { en: 'Testing keys…', tr: 'Anahtarlar test ediliyor…' })} />
+        ) : testError ? (
+          <ErrorBlock message={testError} onRetry={() => testFor && onTest(testFor)} />
+        ) : (
+          <ItemizedResult data={testData} />
         )}
       </Modal>
     </div>

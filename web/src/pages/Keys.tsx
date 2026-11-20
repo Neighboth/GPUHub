@@ -72,6 +72,11 @@ export default function Keys() {
   const [deleteTarget, setDeleteTarget] = useState<ApiKey | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Reveal credential modal
+  const [revealTarget, setRevealTarget] = useState<ApiKey | null>(null);
+  const [revealValue, setRevealValue] = useState('');
+  const [revealLoading, setRevealLoading] = useState(false);
+
   const role = getStoredUser()?.role;
   const isAdmin = !role || role === 'admin';
 
@@ -135,6 +140,20 @@ export default function Keys() {
   function openReassign(k: ApiKey) {
     setReassignTarget(k);
     setReassignProxyId('');
+  }
+
+  async function openReveal(k: ApiKey) {
+    setRevealTarget(k);
+    setRevealValue('');
+    setRevealLoading(true);
+    try {
+      const res = await api.revealKey(k.id);
+      setRevealValue(res.credential ?? '');
+    } catch (e) {
+      toast(errorMessage(e, lang === 'tr' ? 'Credential alınamadı' : 'Failed to reveal credential'), 'error');
+    } finally {
+      setRevealLoading(false);
+    }
   }
 
   async function submitReassign() {
@@ -332,6 +351,10 @@ export default function Keys() {
                         title={L(lang, { en: 'Test key', tr: 'Anahtarı test et' })} aria-label="Test key">
                         <FlaskConical size={14} />
                       </Button>
+                      <Button size="sm" variant="ghost" onClick={() => openReveal(k)}
+                        title={L(lang, { en: 'Show saved credential', tr: 'Kayıtlı credential\'ı göster' })} aria-label="Show credential">
+                        <KeyRound size={14} />
+                      </Button>
                       {isAdmin && (
                         <Button size="sm" variant="ghost" onClick={() => openReassign(k)}
                           title={L(lang, { en: 'Bind / unbind proxy (admin)', tr: 'Proxy ata / kaldır (admin)' })} aria-label="Reassign proxy">
@@ -426,6 +449,25 @@ export default function Keys() {
               tr: `"${deleteTarget.label}" kalıcı olarak silinsin mi? Bu anahtarla gönderilmiş işler iptal edilmez ama yeni işlerde kullanılmaz.`,
             })}
           </p>
+        )}
+      </Modal>
+
+      {/* Reveal credential modal */}
+      <Modal
+        open={!!revealTarget}
+        onClose={() => setRevealTarget(null)}
+        title={revealTarget ? L(lang, { en: `Credential - ${revealTarget.label}`, tr: `Credential - ${revealTarget.label}` }) : ''}
+        footer={<Button variant="ghost" onClick={() => setRevealTarget(null)}>{L(lang, { en: 'Close', tr: 'Kapat' })}</Button>}
+      >
+        {revealLoading ? (
+          <LoadingBlock label={L(lang, { en: 'Decrypting…', tr: 'Şifre çözülüyor…' })} />
+        ) : (
+          <>
+            <p className="mb-2 text-[11px] text-zinc-500">
+              {L(lang, { en: 'Saved credential (decrypted). Anyone with this value can use your account - keep it private.', tr: 'Kayıtlı credential (şifresi çözüldü). Bu değeri gören herkes hesabınızı kullanabilir - gizli tutun.' })}
+            </p>
+            <pre className="max-h-80 overflow-auto rounded-lg border border-zinc-800 bg-zinc-950 p-3 text-[11px] leading-relaxed text-emerald-300">{revealValue}</pre>
+          </>
         )}
       </Modal>
     </div>
