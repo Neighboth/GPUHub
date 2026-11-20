@@ -74,6 +74,8 @@ export default function AITest() {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
+  const [liveLogs, setLiveLogs] = useState('');
+  const [elapsed, setElapsed] = useState(0);
   const stopRef = useRef(false);
 
   useEffect(() => {
@@ -92,8 +94,11 @@ export default function AITest() {
     setMessage('');
     setTurns((prev) => [...prev, { role: 'user', text }]);
     setBusy(true);
+    setLiveLogs('');
+    setElapsed(0);
     setStatus(L(lang, { en: 'Submitting job to provider…', tr: 'Sağlayıcıya job gönderiliyor…' }));
     stopRef.current = false;
+    const t0 = Date.now();
     try {
       const job = await api.createJob({
         type: 'script',
@@ -112,10 +117,18 @@ export default function AITest() {
         await new Promise((r) => setTimeout(r, 5000));
         last = await api.job(String(job.id));
         const st = String(last.status ?? '').toLowerCase();
-        setStatus(`Job #${job.id}: ${st} (provider=${last.provider ?? '-'}, attempts=${Array.isArray(last.attempts) ? last.attempts.length : 0})`);
+        const secs = Math.round((Date.now() - t0) / 1000);
+        setElapsed(secs);
+        const providerName = last.provider_name ?? (typeof last.provider === 'object' ? last.provider?.id : last.provider) ?? '-';
+        setStatus(`Job #${job.id}: ${st} · ${secs}s · ${providerName} · attempt ${Array.isArray(last.attempts) ? last.attempts.length : 0}`);
+        // Show live provider logs so the wait is transparent (model download etc.)
+        if (last.logs) setLiveLogs(last.logs);
         if (['succeeded', 'failed', 'cancelled', 'timeout', 'unschedulable'].includes(st)) break;
       }
+      // Final refresh: scheduler may write logs a moment after status flips.
+      try { last = await api.job(String(job.id)); } catch { /* keep last */ }
       const { answer, meta } = extractAnswer(last.logs);
+      setLiveLogs('');
       setTurns((prev) => [...prev, { role: 'assistant', text: answer, job: last, meta }]);
       setStatus('');
     } catch (e) {
@@ -226,7 +239,17 @@ export default function AITest() {
                 </div>
               ))}
             </div>
-            {status && <div className="mt-2 flex items-center gap-2 text-xs text-emerald-400"><Loader2 size={13} className="animate-spin" />{status}</div>}
+            {status && (
+              <div className="mt-2 space-y-2">
+                <div className="flex items-center gap-2 text-xs text-emerald-400"><Loader2 size={13} className="animate-spin" />{status}</div>
+                <p className="text-[11px] text-zinc-500">
+                  {L(lang, { en: 'First run downloads ~1 GB model to the provider GPU - this usually takes 2-5 minutes. Live provider log below.', tr: 'İlk çalıştırmada sağlayıcı GPU\'suna ~1 GB model indirilir - genelde 2-5 dakika sürer. Canlı sağlayıcı logu aşağıda.' })}
+                </p>
+                {liveLogs && (
+                  <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded bg-zinc-950 p-2 text-[10px] leading-relaxed text-zinc-400">{liveLogs.slice(-1500)}</pre>
+                )}
+              </div>
+            )}
             <form
               className="mt-3 flex items-center gap-2"
               onSubmit={(e) => { e.preventDefault(); void send(); }}
