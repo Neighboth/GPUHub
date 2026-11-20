@@ -16,6 +16,7 @@ import {
   Sun,
   Moon,
   Globe,
+  Sparkles,
 } from 'lucide-react';
 import { api, getStoredUser, type StoredUser } from '../api';
 import Logo from './Logo';
@@ -25,6 +26,7 @@ type NavDef = { to: string; en: string; tr: string; icon: typeof Server; end: bo
 
 const NAV: NavDef[] = [
   { to: '/', en: 'Dashboard', tr: 'Panel', icon: LayoutDashboard, end: true },
+  { to: '/ai-test', en: 'AI Test', tr: 'AI Testi', icon: Sparkles, end: false },
   { to: '/providers', en: 'Providers', tr: 'Sağlayıcılar', icon: Server, end: false },
   { to: '/proxies', en: 'Proxies', tr: 'Proxyler', icon: Network, end: false },
   { to: '/keys', en: 'Keys', tr: 'Anahtarlar', icon: KeyRound, end: false },

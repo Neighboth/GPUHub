@@ -20,7 +20,8 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/gpuhub ./cmd/gpuhu
 
 # --- Stage 3: runtime ---
 FROM alpine:3.20
-RUN addgroup -S gpuhub && adduser -S gpuhub -G gpuhub \
+RUN apk add --no-cache python3 py3-pip \
+	&& addgroup -S gpuhub && adduser -S gpuhub -G gpuhub \
 	&& mkdir -p /data && chown gpuhub:gpuhub /data
 USER gpuhub
 WORKDIR /app

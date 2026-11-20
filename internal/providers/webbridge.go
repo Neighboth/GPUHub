@@ -134,6 +134,12 @@ func (w *webbridgeAdapter) callBridge(ctx context.Context, cred Credential, acti
 	py := "python"
 	if _, err := exec.LookPath(py); err != nil {
 		py = "python3"
+		if _, err := exec.LookPath(py); err != nil {
+			// No Python at all (e.g. minimal Alpine image). Do NATIVE validation so
+			// `Test` still works: check credential shape locally and return a clear
+			// message for actions that genuinely need Python (submit/status/logs).
+			return nativeBridgeResult(w, c, action, extra)
+		}
 	}
 	cmd := exec.CommandContext(ctx, py, helper)
 	cmd.Stdin = strings.NewReader(string(body))
@@ -151,6 +157,30 @@ func (w *webbridgeAdapter) callBridge(ctx context.Context, cred Credential, acti
 		return nil, fmt.Errorf("web bridge: %s", e)
 	}
 	return resp, nil
+}
+
+// nativeBridgeResult handles actions without any Python runtime. Validate is a
+// pure credential-shape check; submit/status/logs explain what's needed.
+func nativeBridgeResult(w *webbridgeAdapter, c webCred, action string, extra map[string]any) (map[string]any, error) {
+	switch action {
+	case "validate":
+		if w.modal {
+			if !strings.HasPrefix(c.TokenID, "ak-") || !strings.HasPrefix(c.Secret, "as-") {
+				return nil, fmt.Errorf("Modal credential must be {\"id\":\"ak-...\",\"secret\":\"as-...\"} (from `modal token new`)")
+			}
+		} else if c.Username == "" || c.Password == "" {
+			return nil, fmt.Errorf("%s credential must be {\"username\":\"...\",\"password\":\"...\"}", w.name)
+		}
+		return map[string]any{"ok": true, "native": true}, nil
+	case "quota":
+		if w.modal {
+			return map[string]any{"raw": "$30/month recurring compute credit (Modal Starter); no REST balance endpoint"}, nil
+		}
+		return map[string]any{"raw": "Google Colab free T4 - dynamic weekly allowance; no fixed quota API"}, nil
+	case "submit", "status", "logs", "cancel":
+		return nil, fmt.Errorf("%s %s needs a Python runtime (`python3` + `modal`/`playwright`): install python3 in the GPUHub image (Dockerfile updated)", w.name, action)
+	}
+	return nil, fmt.Errorf("unknown bridge action %q", action)
 }
 
 func (w *webbridgeAdapter) ID() string            { return w.id }

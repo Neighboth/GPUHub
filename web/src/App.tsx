@@ -12,6 +12,7 @@ import JobDetail from './pages/JobDetail';
 import Keys from './pages/Keys';
 import Settings from './pages/Settings';
 import Audit from './pages/Audit';
+import AITest from './pages/AITest';
 
 function RequireAuth({ children }: { children: ReactElement }) {
   const token = getAccessToken();
@@ -35,6 +36,7 @@ export default function App() {
               }
             >
               <Route index element={<Dashboard />} />
+              <Route path="ai-test" element={<AITest />} />
               <Route path="providers" element={<Providers />} />
               <Route path="proxies" element={<Proxies />} />
               {/* /jobs removed: jobs are submitted via code/API (see README + examples/) - monitoring lives on the Dashboard */}
