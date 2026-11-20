@@ -187,10 +187,15 @@ export default function Providers() {
         })
       : keyModalFor?.id === 'modal'
         ? L(lang, {
-            en: 'Modal credential: {"id":"ak-…","secret":"as-…"} - both tokens from `modal token new`. NOTE: Modal has no public job REST API; deploy examples/modal_runner.py to your Modal account and use Self-hosted Runner to run jobs on Modal compute.',
-            tr: 'Modal credential: {"id":"ak-…","secret":"as-…"} - iki token da `modal token new` komutundan alınır. NOT: Modal public job REST API sunmaz; Modal üzerinde iş çalıştırmak için examples/modal_runner.py dosyasını Modal hesabınıza deploy edin ve Self-hosted Runner ile bağlayın.',
+            en: 'Modal credential: {"id":"ak-…","secret":"as-…"} - both tokens from `modal token new`. GPUHub uses Modal SDK (gRPC) via examples/modal_runner.py; no public REST API.',
+            tr: 'Modal credential: {"id":"ak-…","secret":"as-…"} - iki token da `modal token new` komutundan alınır. GPUHub Modal SDK (gRPC) ve examples/modal_runner.py kullanır; public REST API yok.',
           })
-        : keyModalFor?.id === 'saturn'
+        : keyModalFor?.id === 'colab'
+          ? L(lang, {
+              en: 'Google Colab credential: {"username":"you@gmail.com","password":"app-password"}. GPUHub tries the official google-colab-cli / hidden API first, then Playwright web login. Windows: WSL required for CLI.',
+              tr: 'Google Colab credential: {"username":"you@gmail.com","password":"app-password"}. GPUHub önce resmi google-colab-cli / gizli API\'yi dener, sonra Playwright ile web girişi yapar. Windows: CLI için WSL gerekir.',
+            })
+          : keyModalFor?.id === 'saturn'
           ? L(lang, {
               en: 'Saturn Cloud credential: {"token":"…"} - Bearer access token from your Saturn Cloud instance (free community token at app.community.saturnenterprise.io). 150 free GPU+CPU hours/month on Hosted Free.',
               tr: 'Saturn Cloud credential: {"token":"…"} - Saturn Cloud hesabınızın Bearer access token\'ı (ücretsiz topluluk tokeni app.community.saturnenterprise.io üzerinden alınır). Hosted Free planında ayda 150 ücretsiz GPU+CPU saati.',

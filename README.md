@@ -175,45 +175,39 @@ States: `queued → scheduling → running → succeeded | failed | cancelled | 
 6. **timeout** - `max_duration_seconds` exceeded → remote cancel + same failover logic.
 7. **logs** - full log text stored on the job row; WebSocket `GET /api/v1/jobs/{id}/logs?token=…` streams the buffer live; REST falls back to `GET /api/v1/jobs/{id}`.
 
-## Providers verification (2026-11)
+## Providers (recurring-free-tier audit, 2026-11)
 
-32 adapters are registered (`internal/providers/registry.go`). **Only providers with a real free tier offering COMPUTE GPUs are enabled by default.** Everything marked "disabled" is seeded but off; flip it in Providers → toggle. Verified notes per provider (public docs/marketing pages as of Nov 2026 - free-tier terms change frequently; **verify before relying on them**):
+**Only 7 providers are registered.** Every one has a continuously renewing free
+quota (weekly / monthly / daily reset) - one-time trial credits and closed services
+were removed from the codebase (`git rm internal/providers/adapters2.go adapters3.go`).
 
-| # | Provider | Free GPU tier (as advertised, verified 2026-11) | API class | Status |
-|---|---|---|---|---|
-| 1 | Kaggle Notebooks | ~30 GPU-h/week; **T4 x2 only**; phone verified; 12h session cap | Full session API via `kaggle kernels` (push/status/logs/cancel, Bearer auth) | enabled |
-| 2 | Google Colab | free T4, ~12h sessions, dynamic limits | none official; unofficial runtime protocol (NOTE) | enabled* |
-| 3 | Lightning AI | ~15 free credits/month (≈75 T4 GPU-h); T4/L4/L40S/A100/H200 by account | Bearer REST (Studios) | enabled |
-| 4 | Paperspace Gradient | Free plan: **M4000 8GB** notebook GPU only (Maxwell) + C4 CPU; 6h auto-shutdown; Pro $8/mo adds P4000/RTX4000/A4000, Growth $39/mo adds A100-80G | REST (x-api-key); legacy API | enabled |
-| 5 | Saturn Cloud | **150 GPU+CPU hours/month** (shared pool); JupyterLab/SSH/Dask; auto-shutdown when idle | SuperHub REST at `app.community.saturnenterprise.io`; Bearer token; Submit = create Job (`g4dnxlarge` T4 etc.) - verified live | enabled |
-| 6 | SageMaker Studio Lab | **CLOSED to new customers since 2026-07** - replaced by SageMaker Free Tier (250 CPU-h/mo); T4 sessions for legacy accounts | none (UI-only) | disabled - NOTE |
-| 7 | Paddle AI Studio (Baidu) | V100 16GB activations, ~12h/day cap; Baidu phone account | Bearer REST (`/user/info`); submit UI-only (NOTE) | enabled* |
-| 8 | ModelScope (Alibaba) | 36h one-time NVIDIA A10 24GB (10h/run) + **100h AMD MI300X 192GB** via AMD Developer Program (ROCm) | SDK-token; REST for identity only (NOTE) | enabled* |
-| 9 | Tencent CloudStudio | ~10000 free GPU-minutes/month (T4 16GB, region-dependent); real-name account | token REST (NOTE) | enabled* |
-| 10 | Leafcloud | free research-credit GPU program (T4/L4) | Bearer REST `/instances` | enabled |
-| 11 | Hugging Face Spaces (ZeroGPU) | shared **NVIDIA RTX PRO 6000 Blackwell**, free 5 GPU-min/day (~3 runs); large=48GB (1×quota) / xlarge=96GB (2×quota); 24h reset; Gradio only, 60s/call | Bearer REST `/whoami-v2`; ZeroGPU attach is code-level (NOTE) | enabled* |
-| 12 | Modal | **$30/mo Starter compute credits**; 11 GPU SKUs: T4 16G, L4 24G, A10 24G, L40S 48G, A100 40/80G, RTX PRO 6000 96G, H100 80G, H200 141G, B200 180G, B300 288G | `{"id":"ak-...","secret":"as-..."}` from `modal token new`; **no public REST submit** - deploy `examples/modal_runner.py` in your Modal account and use Self-hosted Runner to run jobs there (NOTE) | enabled* |
-| 13 | Beam | free monthly container allowance, T4/L4 | Bearer REST `/containers` (inferred) | enabled |
-| 14 | Intel Tiber AI Cloud | free Gaudi2 96GB developer program | Bearer REST; OpenShift notebooks (NOTE) | enabled* |
-| 15 | Genesis Cloud | **trial credit only, no permanent free GPU** | REST | disabled - NOTE |
-| 16 | Anyscale | trial credits only (free tier ended) | REST | disabled - NOTE |
-| 17 | JarvisLabs | free notebook credits (new accounts) | Bearer REST (inferred) | enabled |
-| 18 | Nebius Cloud | no free GPU quota | REST | disabled - NOTE |
-| 19 | Hyperbolic | one-time trial credits | REST | disabled - NOTE |
-| 20 | Salad Cloud | community-capacity free tier, containers only | Bearer REST | disabled - NOTE |
-| 21 | RunPod | **no permanent free tier** ($1 one-time credit) | GraphQL | disabled - PoC skeleton per spec |
-| 22 | Codesphere | free tier = CPU only | REST | disabled - NOTE |
-| 23 | Replit | free tier = CPU only | REST | disabled - NOTE |
-| 24 | Deepnote | free tier = CPU only | REST | disabled - NOTE |
-| 25 | Hex | free tier = no GPU | REST | disabled - NOTE |
-| 26 | Noteable | free tier = no GPU | REST | disabled - NOTE |
-| 27 | Domino Datalab | trial / OSS-program free, verify | REST | disabled - NOTE |
-| 28 | FloydHub | **service discontinued** | - | disabled - skeleton kept |
-| 29 | Spell.ml | rebranded (Determined/HPE) | - | disabled - NOTE |
-| 30 | Valohai | 10 free compute-hours trial project | Bearer REST | disabled - NOTE |
-| 31 | Determined AI | OSS, free on your own GPUs | Bearer REST | enabled (self-host) |
-| 32 | ClearML | free hosted orchestration; GPUs must come from your agents | HTTP basic (access/secret) | enabled (self-host GPU) |
-| **33** | **Self-hosted Runner** | **your own machine anywhere** - Kaggle/Colab cell, Modal deploy, own RTX box | Deploy `examples/runner.py` (HTTP + Bearer token) | **enabled** |
+| Provider | Recurring free quota | Submission path | Key format |
+|---|---|---|---|
+| **Kaggle Notebooks** | 30 GPU-h/week (T4 x2), resets Sat 00:00 UTC | Real kernels API (push/status/logs/cancel) - verified working live | `{"token":"KGAT_...","username":"..."}` |
+| **Google Colab** | free T4, dynamic weekly allowance | API-first: official `google-colab-cli` (OAuth) / hidden `/tun/m/*` + `colab.pa.googleapis.com/v1/*`; Playwright fallback (`examples/web_bridge.py`). WSL needed on Windows | `{"username":"you@gmail.com","password":"app-password"}` |
+| **Modal** | $30/month compute credit, resets monthly | SDK/gRPC via `ak-`/`as-` (`examples/modal_runner.py` deployed into your account); no public REST control plane | `{"id":"ak-...","secret":"as-..."}` |
+| **Saturn Cloud** | 150 GPU+CPU h/month advertised (account-dependent) | SuperHub REST (`app.community.saturnenterprise.io`), JobCreate `command`+`start_script` | `{"token":"..."}` (Bearer JWT) |
+| **Paperspace Gradient** | free M4000 notebook, 6h auto-shutdown (capacity-limited) | REST `/jobs` (x-api-key) | `{"key":"..."}` |
+| **Hugging Face Spaces (ZeroGPU)** | 5 GPU-min/day RTX PRO 6000, 24h reset | Space deploy (`@spaces.GPU`), no external job API; quota tracked locally | `{"token":"hf_..."}` (Bearer) |
+| **Self-hosted Runner** | your own GPU anywhere | `examples/runner.py` HTTP + Bearer | `{"base_url":"https://...","token":"..."}` |
+
+Removed (not recurring / no GPU / closed): Lightning AI (one-time 30 credits), ModelScope
+(36h one-time notebook GPU), SageMaker Studio Lab (closed 2026-07), Beam, Intel Tiber,
+Genesis, Anyscale, JarvisLabs, Nebius, Hyperbolic, Salad, RunPod, Codesphere, Replit,
+Deepnote, Hex, Noteable, Domino, FloydHub, Spell, Valohai, Determined, ClearML,
+CloudStudio, Paddle AI Studio, Leafcloud.
+
+**Modal API clarification:** Modal has a real API, but it is gRPC (Python/JS/Go SDK,
+`modal.com`), not a public REST job-submit API. Sites like `modal.rest` showing
+`/v1/apps`, `/functions/{id}/invoke` are third-party, not affiliated with Modal.
+`modal curl` only calls your own deployed web endpoints. GPUHub submits to Modal
+via the SDK bridge in `examples/web_bridge.py` (API-first, Playwright fallback).
+
+**Colab "web'den bağlan, API'ye çevir":** `examples/web_bridge.py` first tries the
+official `google-colab-cli` (OAuth) and Colab's hidden backend HTTP endpoints
+(`/tun/m/assign`, `colab.pa.googleapis.com/v1/*`); if unavailable it falls back to
+Playwright with the supplied Google credentials to establish a session. No credential
+is sent to third parties - all traffic goes to Google's own domains via the key's proxy.
 
 `enabled*` = provider is usable for quota/scheduling bookkeeping and key management, but **submit** runs through the provider's own UI/SDK (NOTE) - GPUHub will mark attempts failed with an explicit "submission via API not supported; see README NOTE" and fail over to the next candidate.
 

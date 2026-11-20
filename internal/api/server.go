@@ -51,6 +51,28 @@ func (s *Server) Handler() http.Handler { return s.router }
 
 // SeedProviders inserts missing provider catalog rows; disabled-by-default providers get enabled=0.
 func (s *Server) SeedProviders(ctx context.Context) {
+	// Remove catalog rows for adapters that no longer exist (e.g. providers removed
+	// in the recurring-free-tier audit). Their keys are deleted too, via FK cascade.
+	registered := map[string]bool{}
+	for _, p := range providersAll() {
+		registered[p.ID()] = true
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM providers`)
+	if err == nil {
+		var stale []string
+		for rows.Next() {
+			var id string
+			_ = rows.Scan(&id)
+			if !registered[id] {
+				stale = append(stale, id)
+			}
+		}
+		rows.Close()
+		for _, id := range stale {
+			_, _ = s.db.ExecContext(ctx, `DELETE FROM providers WHERE id=?`, id)
+		}
+	}
+
 	for _, p := range providersAll() {
 		enabled := 1
 		if providersDefaultDisabled(p.ID()) {

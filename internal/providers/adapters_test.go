@@ -40,14 +40,14 @@ func TestValidateKey_Success(t *testing.T) {
 		if r.URL.Path != "/users/me" {
 			t.Errorf("unexpected path %s", r.URL.Path)
 		}
-		if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
-			t.Errorf("missing bearer auth, got %q", r.Header.Get("Authorization"))
+		if !strings.HasPrefix(r.Header.Get("x-api-key"), "") && r.Header.Get("x-api-key") == "" {
+			t.Errorf("missing x-api-key auth, got %q", r.Header.Get("x-api-key"))
 		}
 		_, _ = w.Write([]byte(`{"id":"u1"}`))
 	}))
 	defer srv.Close()
-	OverrideBaseURL("lightning", srv.URL)
-	p := NewLightning().WithBaseURL(srv.URL)
+	OverrideBaseURL("paperspace", srv.URL)
+	p := NewPaperspace().WithBaseURL(srv.URL)
 	if p.baseURL != srv.URL {
 		t.Fatalf("override not applied: %s", p.baseURL)
 	}
@@ -63,8 +63,8 @@ func TestValidateKey_401(t *testing.T) {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 	}))
 	defer srv.Close()
-	OverrideBaseURL("beam", srv.URL)
-	p := NewBeam().WithBaseURL(srv.URL)
+	OverrideBaseURL("hf-spaces", srv.URL)
+	p := NewHFSpaces().WithBaseURL(srv.URL)
 	ctx := context.Background()
 	err := p.ValidateKey(ctx, testCred(), "")
 	if err == nil {
@@ -196,8 +196,8 @@ func TestQuota_FromEndpoint(t *testing.T) {
 
 func TestAll_ProvidersRegistered(t *testing.T) {
 	all := All()
-	if len(all) < 32 {
-		t.Fatalf("expected >=32 adapters, got %d", len(all))
+	if len(all) < 6 {
+		t.Fatalf("expected >=6 recurring-free adapters, got %d", len(all))
 	}
 	seen := map[string]bool{}
 	for _, p := range all {

@@ -46,12 +46,7 @@ func Lookup(id string) Provider {
 	return nil
 }
 
-// DefaultDisabled lists provider ids that are included as adapters but have no permanent
-// free tier (or a discontinued service) and are therefore seeded into the DB as disabled.
-var DefaultDisabled = map[string]bool{
-	"genesis": true, "anyscale": true, "nebius": true, "hyperbolic": true,
-	"salad": true, "runpod": true, "codesphere": true, "replit": true,
-	"deepnote": true, "hex": true, "noteable": true, "domino": true,
-	"floydhub": true, "spell": true, "valohai": true,
-	"sagemaker-studio-lab": true, // closed to new customers since 2026-07
-}
+// DefaultDisabled is intentionally EMPTY. Only providers with a recurring free
+// tier are registered at all (see adapters*.go / README), so every built-in is
+// enabled by default. Kept as a map for config/API compatibility.
+var DefaultDisabled = map[string]bool{}
