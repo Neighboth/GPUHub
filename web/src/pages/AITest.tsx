@@ -18,11 +18,10 @@ function buildScript(modelId: ModelId, userMessage: string): string {
   const m = MODELS.find((x) => x.id === modelId)!;
   // message is JSON-encoded so quoting is safe inside the Python heredoc.
   const msg = JSON.stringify(userMessage);
-  return `#!/bin/bash
-set -e
-pip install --quiet --disable-pip-version-check llama-cpp-python huggingface_hub
-python - <<'PY'
-import json, time
+  // Kaggle kernels AND self-hosted runners execute the payload as PYTHON code,
+  // so the payload must be pure Python - never a bash script with pip install.
+  return `import subprocess, sys, json, time
+subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "llama-cpp-python", "huggingface_hub"])
 from huggingface_hub import hf_hub_download
 from llama_cpp import Llama
 
@@ -46,7 +45,6 @@ print(answer, flush=True)
 print("=== GPUHUB_MODEL_ANSWER_END ===", flush=True)
 print(f"[gpuhub] prompt_tokens={u.get('prompt_tokens')} completion_tokens={u.get('completion_tokens')}", flush=True)
 print(f"[gpuhub] toplam_sure={round(time.time()-t0,1)}s", flush=True)
-PY
 `;
 }
 

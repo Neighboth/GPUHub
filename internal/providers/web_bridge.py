@@ -123,8 +123,11 @@ def browser(req, action):
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
         if provider == "colab":
-            page.goto(host + "/", timeout=60000)
-            page.wait_for_load_state("networkidle", timeout=30000)
+            try:
+                page.goto(host + "/", timeout=45000, wait_until="domcontentloaded")
+            except Exception as e:
+                browser.close()
+                return {"error": "Colab web acilamadi (Google engeli/timeout): %s" % str(e)[:200]}
             # Google login: username then password (app password if 2FA enabled).
             if page.locator('input[type="email"]').count():
                 page.locator('input[type="email"]').first.fill(req["username"])
@@ -135,9 +138,14 @@ def browser(req, action):
                 page.locator('button:has-text("Next")').first.click()
                 page.wait_for_timeout(3000)
             if action == "validate":
-                ok_ = "/tun/m/assignments" in page.content() or "colab" in page.url
+                # Real login success = we are past Google's account chooser and
+                # reached the Colab app UI (New notebook button / Drive file list).
+                content = page.content()
+                ok_ = bool(page.locator('button:has-text("New notebook")').count()
+                           or page.locator('text=Welcome to Colab').count()
+                           or "/drive/" in page.url)
                 browser.close()
-                return {"ok": bool(ok_), "browser": True} if ok_ else None
+                return {"ok": bool(ok_), "browser": True} if ok_ else {"error": "Google girisi basarisiz (captcha/2FA/sifre) - google-colab-cli (OAuth) kullanin"}
             if action == "submit":
                 # Open a notebook from the user's Drive folder is not deterministic;
                 # report the session cookie so GPUHub can call hidden APIs directly.
