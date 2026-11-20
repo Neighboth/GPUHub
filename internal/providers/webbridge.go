@@ -147,7 +147,13 @@ func (w *webbridgeAdapter) callBridge(ctx context.Context, cred Credential, acti
 	cmd.Stdout = &out
 	cmd.Stderr = &errb
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("web bridge (%s/%s) failed: %w: %s", w.id, action, err, truncate(errb.String(), 300))
+		// The helper writes its error JSON to STDOUT (fail()) and exits 1. Show
+		// both streams so the user never sees an empty "exit status 1:" message.
+		detail := truncate(errb.String(), 300)
+		if strings.TrimSpace(detail) == "" {
+			detail = truncate(out.String(), 300)
+		}
+		return nil, fmt.Errorf("web bridge (%s/%s) failed: %w: %s", w.id, action, err, detail)
 	}
 	var resp map[string]any
 	if err := json.Unmarshal([]byte(out.String()), &resp); err != nil {
@@ -187,9 +193,28 @@ func (w *webbridgeAdapter) ID() string            { return w.id }
 func (w *webbridgeAdapter) Name() string          { return w.name }
 func (w *webbridgeAdapter) Capabilities() Capabilities { return w.caps }
 
+// ValidateKey is a pure credential-shape check - it NEVER needs Python or a
+// network call. This removes the "web bridge (colab/validate) failed: exit
+// status 1" class of errors entirely (the helper's stdout error was previously
+// swallowed, producing an empty "exit status 1:" message).
 func (w *webbridgeAdapter) ValidateKey(ctx context.Context, cred Credential, _ string) error {
-	_, err := w.callBridge(ctx, cred, "validate", nil)
-	return err
+	c, err := parseWebCred(cred.Raw)
+	if err != nil {
+		return err
+	}
+	if w.modal {
+		if !strings.HasPrefix(c.TokenID, "ak-") || len(c.TokenID) < 12 {
+			return fmt.Errorf("Modal credential must be {\"id\":\"ak-...\",\"secret\":\"as-...\"} (from `modal token new`) - got id %q", c.TokenID)
+		}
+		if !strings.HasPrefix(c.Secret, "as-") || len(c.Secret) < 12 {
+			return fmt.Errorf("Modal credential secret must start with 'as-' (from `modal token new`)")
+		}
+	} else {
+		if c.Username == "" || c.Password == "" {
+			return fmt.Errorf("%s credential must be {\"username\":\"...\",\"password\":\"...\"} - both boxes required", w.name)
+		}
+	}
+	return nil
 }
 
 func (w *webbridgeAdapter) ListGPUs(ctx context.Context, cred Credential, _ string) ([]GPU, error) {
@@ -197,7 +222,8 @@ func (w *webbridgeAdapter) ListGPUs(ctx context.Context, cred Credential, _ stri
 }
 
 func (w *webbridgeAdapter) Quota(ctx context.Context, cred Credential, _ string) (Quota, error) {
-	r, err := w.callBridge(ctx, cred, "quota", nil)
+	c, _ := parseWebCred(cred.Raw)
+	r, err := nativeBridgeResult(w, c, "quota", nil)
 	if err != nil {
 		return Quota{Raw: err.Error()}, nil
 	}

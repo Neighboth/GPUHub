@@ -259,7 +259,31 @@ func (s *saturnAdapter) Logs(ctx context.Context, cred Credential, _ string, id 
 	if err != nil {
 		return nil, err
 	}
-	// Saturn returns the logs as plain text (historical log lines).
+	// Saturn returns {"logs":[{...}],"prev_key":...,"next_key":...} - decode the
+	// log array into plain text instead of leaking raw JSON into the job logs
+	// (which broke AI Test output).
+	var probe struct {
+		Logs []struct {
+			Data    string `json:"data"`
+			Message string `json:"message"`
+			Line    string `json:"line"`
+			Text    string `json:"text"`
+			Stream  string `json:"stream_name"`
+		} `json:"logs"`
+	}
+	if err := json.Unmarshal(b, &probe); err == nil {
+		var sb strings.Builder
+		for _, l := range probe.Logs {
+			v := firstNonEmpty(l.Data, l.Message, l.Line, l.Text)
+			if v != "" {
+				sb.WriteString(v)
+			}
+		}
+		if sb.Len() > 0 {
+			return strings.NewReader(sb.String()), nil
+		}
+		return strings.NewReader("[Saturn job henüz log üretmedi - pod kuyrukta/çalışıyor]"), nil
+	}
 	return strings.NewReader(string(b)), nil
 }
 
