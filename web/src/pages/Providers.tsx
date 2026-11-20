@@ -29,7 +29,6 @@ import {
   Input,
   Label,
   Select,
-  Textarea,
   Toggle,
   LoadingBlock,
   ErrorBlock,
@@ -38,6 +37,56 @@ import {
 } from '../components/ui';
 import { useToast } from '../components/Toast';
 import { useLang, L } from '../i18n';
+
+type CredField = {
+  key: string;
+  label: { en: string; tr: string };
+  placeholder: string;
+  secret?: boolean;
+};
+
+// Per-provider credential boxes. Each box holds exactly ONE piece of information.
+// The values are assembled into the JSON credential the API expects on submit.
+function credentialFieldsFor(providerId: string): CredField[] {
+  switch (providerId) {
+    case 'kaggle':
+      return [
+        { key: 'token', label: { en: 'API token (KGAT_…)', tr: 'API token (KGAT_…)' }, placeholder: 'KGAT_…', secret: true },
+        { key: 'username', label: { en: 'Kaggle username (optional)', tr: 'Kaggle kullanıcı adı (opsiyonel)' }, placeholder: 'thesalihsimsek' },
+      ];
+    case 'colab':
+      return [
+        { key: 'username', label: { en: 'Google e-mail', tr: 'Google e-posta' }, placeholder: 'you@gmail.com' },
+        { key: 'password', label: { en: 'Google app password', tr: 'Google uygulama şifresi' }, placeholder: '••••••••', secret: true },
+      ];
+    case 'modal':
+      return [
+        { key: 'id', label: { en: 'Token ID (ak-…)', tr: 'Token ID (ak-…)' }, placeholder: 'ak-…' },
+        { key: 'secret', label: { en: 'Token secret (as-…)', tr: 'Token secret (as-…)' }, placeholder: 'as-…', secret: true },
+      ];
+    case 'saturn':
+      return [
+        { key: 'token', label: { en: 'Bearer access token', tr: 'Bearer erişim tokenı' }, placeholder: 'eyJhbG…', secret: true },
+      ];
+    case 'paperspace':
+      return [
+        { key: 'key', label: { en: 'API key', tr: 'API anahtarı' }, placeholder: 'x-api-key', secret: true },
+      ];
+    case 'hf-spaces':
+      return [
+        { key: 'token', label: { en: 'Hugging Face token', tr: 'Hugging Face token' }, placeholder: 'hf_…', secret: true },
+      ];
+    case 'runner':
+      return [
+        { key: 'base_url', label: { en: 'Runner URL', tr: 'Runner URL' }, placeholder: 'https://…' },
+        { key: 'token', label: { en: 'Runner token', tr: 'Runner token' }, placeholder: '••••••••', secret: true },
+      ];
+    default:
+      return [
+        { key: 'token', label: { en: 'Token', tr: 'Token' }, placeholder: '…', secret: true },
+      ];
+  }
+}
 
 export default function Providers() {
   const toast = useToast();
@@ -51,7 +100,7 @@ export default function Providers() {
   // Add-key modal state
   const [keyModalFor, setKeyModalFor] = useState<Provider | null>(null);
   const [label, setLabel] = useState('');
-  const [credential, setCredential] = useState('');
+  const [credValues, setCredValues] = useState<Record<string, string>>({});
   const [boundProxyId, setBoundProxyId] = useState('');
   const [dailyQuota, setDailyQuota] = useState('');
   const [weeklyQuota, setWeeklyQuota] = useState('');
@@ -124,7 +173,7 @@ export default function Providers() {
   function openKeyModal(p: Provider) {
     setKeyModalFor(p);
     setLabel(p.id.slice(0, 12));
-    setCredential('');
+    setCredValues({});
     setBoundProxyId('');
     setDailyQuota('');
     setWeeklyQuota('');
@@ -147,8 +196,14 @@ export default function Providers() {
   function submitKey(e: FormEvent) {
     e.preventDefault();
     if (!keyModalFor) return;
-    if (!credential.trim()) {
-      setFormError(lang === 'tr' ? 'Credential zorunludur.' : 'Credential is required.');
+    const fields = credentialFieldsFor(keyModalFor.id);
+    const cred: Record<string, string> = {};
+    for (const f of fields) {
+      const v = (credValues[f.key] ?? '').trim();
+      if (v) cred[f.key] = v;
+    }
+    if (Object.keys(cred).length === 0) {
+      setFormError(lang === 'tr' ? 'En az bir bilgi kutusunu doldurun.' : 'Fill at least one credential field.');
       return;
     }
     setSubmitting(true);
@@ -156,7 +211,7 @@ export default function Providers() {
     api
       .addProviderKey(keyModalFor.id, {
         label: label.trim() || undefined,
-        credential: credential.trim(),
+        credential: JSON.stringify(cred),
         // Empty selection = no proxy (direct egress) - sticky binding is optional.
         bound_proxy_id: boundProxyId ? Number(boundProxyId) : undefined,
         daily_quota: dailyQuota.trim() ? Number(dailyQuota) : undefined,
@@ -174,33 +229,6 @@ export default function Providers() {
       .catch((e) => setFormError(errorMessage(e, lang === 'tr' ? 'Anahtar eklenemedi' : 'Failed to add key')))
       .finally(() => setSubmitting(false));
   }
-
-  const credentialHint = keyModalFor?.id === 'runner'
-    ? L(lang, {
-        en: 'Self-hosted Runner credential: {"base_url":"https://xxxx.ngrok.app","token":"…"} - start examples/runner.py in any GPU environment, or examples/modal_runner.py inside your Modal account.',
-        tr: 'Self-hosted Runner credential: {"base_url":"https://xxxx.ngrok.app","token":"…"} - examples/runner.py dosyasını herhangi bir GPU ortamında başlatın (veya Modal hesabınızda examples/modal_runner.py).',
-      })
-    : keyModalFor?.id === 'kaggle'
-      ? L(lang, {
-          en: 'Kaggle API token: {"token":"KGAT_…"} (recommended - works with Bearer) or legacy kaggle.json {"username":"…","key":"…"}',
-          tr: 'Kaggle API token\'ı: {"token":"KGAT_…"} (önerilen, Bearer ile çalışır) veya klasik kaggle.json {"username":"…","key":"…"}',
-        })
-      : keyModalFor?.id === 'modal'
-        ? L(lang, {
-            en: 'Modal credential: {"id":"ak-…","secret":"as-…"} - both tokens from `modal token new`. GPUHub uses Modal SDK (gRPC) via examples/modal_runner.py; no public REST API.',
-            tr: 'Modal credential: {"id":"ak-…","secret":"as-…"} - iki token da `modal token new` komutundan alınır. GPUHub Modal SDK (gRPC) ve examples/modal_runner.py kullanır; public REST API yok.',
-          })
-        : keyModalFor?.id === 'colab'
-          ? L(lang, {
-              en: 'Google Colab credential: {"username":"you@gmail.com","password":"app-password"}. GPUHub tries the official google-colab-cli / hidden API first, then Playwright web login. Windows: WSL required for CLI.',
-              tr: 'Google Colab credential: {"username":"you@gmail.com","password":"app-password"}. GPUHub önce resmi google-colab-cli / gizli API\'yi dener, sonra Playwright ile web girişi yapar. Windows: CLI için WSL gerekir.',
-            })
-          : keyModalFor?.id === 'saturn'
-          ? L(lang, {
-              en: 'Saturn Cloud credential: {"token":"…"} - Bearer access token from your Saturn Cloud instance (free community token at app.community.saturnenterprise.io). 150 free GPU+CPU hours/month on Hosted Free.',
-              tr: 'Saturn Cloud credential: {"token":"…"} - Saturn Cloud hesabınızın Bearer access token\'ı (ücretsiz topluluk tokeni app.community.saturnenterprise.io üzerinden alınır). Hosted Free planında ayda 150 ücretsiz GPU+CPU saati.',
-            })
-          : L(lang, { en: 'Token or JSON credential (see README for this provider).', tr: 'Token veya JSON credential (sağlayıcıya göre README\'ye bakın).' });
 
   return (
     <div className="space-y-6">
@@ -315,10 +343,23 @@ export default function Providers() {
             <Label htmlFor="key-label">{L(lang, { en: 'Label', tr: 'Etiket' })}</Label>
             <Input id="key-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="my-kaggle-account" disabled={submitting} />
           </div>
-          <div>
-            <Label htmlFor="key-credential">{L(lang, { en: 'Credential *', tr: 'Credential *' })}</Label>
-            <Textarea id="key-credential" value={credential} onChange={(e) => setCredential(e.target.value)} rows={4} placeholder="…" disabled={submitting} />
-            <p className="mt-1.5 flex items-start gap-1.5 text-[11px] text-zinc-500"><Info size={12} className="mt-0.5 shrink-0" />{credentialHint}</p>
+          <div className="space-y-3">
+            <p className="text-xs font-medium text-zinc-300">{L(lang, { en: 'Credential fields', tr: 'Credential alanları' })}</p>
+            {keyModalFor && credentialFieldsFor(keyModalFor.id).map((f) => (
+              <div key={f.key}>
+                <Label htmlFor={`key-cred-${f.key}`}>{L(lang, f.label)}</Label>
+                <Input
+                  id={`key-cred-${f.key}`}
+                  type={f.secret ? 'password' : 'text'}
+                  autoComplete="off"
+                  value={credValues[f.key] ?? ''}
+                  onChange={(e) => setCredValues((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                  placeholder={f.placeholder}
+                  disabled={submitting}
+                />
+              </div>
+            ))}
+            <p className="mt-1.5 flex items-start gap-1.5 text-[11px] text-zinc-500"><Info size={12} className="mt-0.5 shrink-0" />{L(lang, { en: 'Each box holds one value. GPUHub assembles them into the credential format automatically - no JSON needed.', tr: 'Her kutuya tek bir bilgi girin. GPUHub bunları otomatik olarak credential formatına çevirir - JSON gerekmez.' })}</p>
           </div>
           <div>
             <Label htmlFor="key-proxy">
