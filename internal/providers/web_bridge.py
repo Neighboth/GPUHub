@@ -76,16 +76,10 @@ def api_modal(req, action):
     env = dict(os.environ, MODAL_TOKEN_ID=tid, MODAL_TOKEN_SECRET=secret)
     job = req.get("id", "")
     if action == "validate":
-        # Real authentication check against Modal's gRPC control plane using the
-        # supplied tokens (not just `import modal`). modal.Volume.list performs an
-        # authenticated RPC and works for any valid workspace token.
-        code = ("import modal\n"
-                "with modal.Client() as c:\n"
-                "    modal.Volume.list(client=c)\n"
-                "print('MODAL_AUTH_OK')")
-        r = subprocess.run([sys.executable, "-c", code], capture_output=True,
-                           text=True, timeout=90, env=env)
-        if r.returncode == 0 and "MODAL_AUTH_OK" in r.stdout:
+        # Real auth check against Modal's gRPC control plane via the CLI.
+        r = subprocess.run([sys.executable, "-m", "modal", "app", "list"],
+                           capture_output=True, text=True, timeout=120, env=env)
+        if r.returncode == 0:
             return {"ok": True, "sdk": True}
         return {"error": "Modal auth failed: " + (r.stderr or r.stdout)[-400:]}
     if action == "submit":
