@@ -31,11 +31,17 @@ func (k *kaggleAdapter) Name() string { return "Kaggle Notebooks" }
 
 func (k *kaggleAdapter) Capabilities() Capabilities {
 	return Capabilities{
-		GPUs:             []GPU{gpu("T4", 16, 2)},
+		// Ordered by preference: GPU first, then TPU, then CPU. The scheduler tries
+		// GPUType + GPUTypeFallback in this order; quota is tracked per accelerator.
+		GPUs: []GPU{
+			gpu("T4", 16, 2), // free GPU: 30h/week
+			gpu("TPU", 0, 1), // free TPU v3-8: 20h/week (VRAM 0 = N/A)
+			gpu("CPU", 0, 4), // always available fallback (no accelerator quota)
+		},
 		MaxDurationHours: 12,
 		Frameworks:       []string{"pytorch", "tensorflow", "jax"},
 		Notebooks:        true, Docker: false, SSH: false,
-		FreeTierNotes: "30 GPU-hours/week (T4 x2 16GB; P100 retired 2026-09); phone-verified; 12h max; open public kernels only",
+		FreeTierNotes: "GPU T4 x2: 30h/week -> TPU v3-8: 20h/week -> CPU: unlimited. 12h session cap; phone-verified.",
 	}
 }
 
@@ -141,14 +147,18 @@ func (k *kaggleAdapter) Submit(ctx context.Context, cred Credential, _ string, j
 	// No username needed for submission: kernels/push authenticates with the Bearer token alone.
 	// (Previously this called resolveUsername which pushed a throwaway probe kernel on every submit — removed.)
 	title := fmt.Sprintf("gpuhub-%d", time.Now().Unix())
+	// Accelerator selection follows the job's matched GPU type (GPU -> TPU -> CPU).
+	// The scheduler passes the winning fallback type in GPUType after matching.
+	enableGPU := job.GPUType == "" || (job.GPUType != "TPU" && job.GPUType != "CPU")
+	enableTPU := job.GPUType == "TPU"
 	body := map[string]any{
 		"newTitle":       title,
 		"text":           scriptForJob(job),
 		"language":       "python",
 		"kernelType":     "script",
 		"isPrivate":      true,
-		"enableGPU":      true,
-		"enableTPU":      false,
+		"enableGPU":      enableGPU,
+		"enableTPU":      enableTPU,
 		"enableInternet": true,
 	}
 	var probe struct {
@@ -384,32 +394,36 @@ func (k *kaggleAdapter) Quota(ctx context.Context, cred Credential, _ string) (Q
 			TimeReserved     string `json:"timeReserved"`
 			TotalTimeAllowed string `json:"totalTimeAllowed"`
 		} `json:"gpuQuota"`
+		TpuQuota struct {
+			TimeUsed         string `json:"timeUsed"`
+			TimeReserved     string `json:"timeReserved"`
+			TotalTimeAllowed string `json:"totalTimeAllowed"`
+		} `json:"tpuQuota"`
 	}
 	_, err := k.doJSON(ctx, cred, http.MethodPost,
 		"https://api.kaggle.com/v1/kernels.KernelsApiService/GetAcceleratorQuotaStatistics",
 		map[string]string{}, &probe)
 	if err != nil {
-		// Quota endpoint not always available; keep silent.
-		return Quota{Raw: "quota introspection not available"}, nil
+		return Quota{Raw: "quota introspection not available", GPUPercents: map[string]float64{"T4": 0, "TPU": 0, "CPU": 0}}, nil
 	}
-	used := parseKaggleDura(probe.GpuQuota.TimeUsed)
-	total := parseKaggleDura(probe.GpuQuota.TotalTimeAllowed)
-	usedS := 0.0
-	totalS := 0.0
-	if used > 0 {
-		usedS = used.Seconds()
+	pct := func(used, total string) float64 {
+		u, t := parseKaggleDura(used).Seconds(), parseKaggleDura(total).Seconds()
+		if t <= 0 {
+			return 0
+		}
+		return u / t
 	}
-	if total > 0 {
-		totalS = total.Seconds()
-	}
+	gpuPct := pct(probe.GpuQuota.TimeUsed, probe.GpuQuota.TotalTimeAllowed)
+	tpuPct := pct(probe.TpuQuota.TimeUsed, probe.TpuQuota.TotalTimeAllowed)
 	q := Quota{
-		DailyUsed:  int(usedS),
-		DailyLimit: int(totalS), // treat weekly window as the binding constraint
-		Raw:        probe.GpuQuota.TimeUsed + " used / " + probe.GpuQuota.TotalTimeAllowed + " allowed; refreshes " + probe.QuotaRefreshTime,
-		ResetsAt:   probe.QuotaRefreshTime,
-	}
-	if totalS > 0 {
-		q.Percent = usedS / totalS
+		DailyUsed:   int(parseKaggleDura(probe.GpuQuota.TimeUsed).Seconds()),
+		DailyLimit:  int(parseKaggleDura(probe.GpuQuota.TotalTimeAllowed).Seconds()),
+		Percent:     gpuPct, // primary = GPU (scheduler fallback reads GPUPercents)
+		ResetsAt:    probe.QuotaRefreshTime,
+		GPUPercents: map[string]float64{"T4": gpuPct, "TPU": tpuPct, "CPU": 0},
+		Raw: fmt.Sprintf("GPU %s/%s (%.0f%%) | TPU %s/%s (%.0f%%) | CPU ∞; refresh %s",
+			probe.GpuQuota.TimeUsed, probe.GpuQuota.TotalTimeAllowed, gpuPct*100,
+			probe.TpuQuota.TimeUsed, probe.TpuQuota.TotalTimeAllowed, tpuPct*100, probe.QuotaRefreshTime),
 	}
 	return q, nil
 }

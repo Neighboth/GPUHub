@@ -25,6 +25,7 @@ var GPUCatalog = map[string]int{
 	"B300":       288,
 	"Gaudi2":     96,
 	"TPU":        0, // matches "any" queries only
+	"CPU":        0, // CPU-only fallback (no accelerator)
 }
 
 // KnownGPUTypes lists gpu_type values accepted by the API (plus "any").

@@ -28,7 +28,12 @@ func matchProviderGPUs(caps providers.Capabilities, spec providers.JobSpec) (pro
 			if !strings.EqualFold(want, "any") && !strings.EqualFold(g.Type, want) {
 				continue
 			}
-			if spec.MinVRAMGB > 0 && g.VRAMGB < spec.MinVRAMGB {
+			if spec.MinVRAMGB > 0 && g.VRAMGB > 0 && g.VRAMGB < spec.MinVRAMGB {
+				continue
+			}
+			// VRAM-less accelerators (TPU/CPU) only match when explicitly requested
+			// by name - never through "any" with a VRAM requirement.
+			if g.VRAMGB == 0 && !strings.EqualFold(want, g.Type) {
 				continue
 			}
 			if spec.GPUCount > 0 && g.MaxCount > 0 && g.MaxCount < spec.GPUCount {
@@ -60,8 +65,11 @@ func rejectionReason(caps providers.Capabilities, spec providers.JobSpec) string
 	for _, want := range wants {
 		for _, g := range caps.GPUs {
 			if strings.EqualFold(want, "any") || strings.EqualFold(g.Type, want) {
-				if spec.MinVRAMGB > 0 && g.VRAMGB < spec.MinVRAMGB {
+				if spec.MinVRAMGB > 0 && g.VRAMGB > 0 && g.VRAMGB < spec.MinVRAMGB {
 					return fmt.Sprintf("GPU %s has %dGB VRAM < required %dGB", g.Type, g.VRAMGB, spec.MinVRAMGB)
+				}
+				if g.VRAMGB == 0 && !strings.EqualFold(want, g.Type) {
+					continue // TPU/CPU only via explicit request
 				}
 				if spec.GPUCount > 0 && g.MaxCount > 0 && g.MaxCount < spec.GPUCount {
 					return fmt.Sprintf("GPU %s max %d per job < required %d", g.Type, g.MaxCount, spec.GPUCount)

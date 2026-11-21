@@ -58,6 +58,9 @@ type Quota struct {
 	Percent     float64 `json:"percent"`      // 0..1 of the binding constraint; 1 = exhausted
 	ResetsAt    string  `json:"resets_at,omitempty"`
 	Raw         string  `json:"raw,omitempty"`
+	// GPUPercents holds per-accelerator usage (e.g. T4, TPU) so the scheduler can
+	// fall back to the next accelerator when one quota is exhausted.
+	GPUPercents map[string]float64 `json:"gpu_percents,omitempty"`
 }
 
 type JobType string

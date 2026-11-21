@@ -261,16 +261,32 @@ func (s *Scheduler) scheduleOne(ctx context.Context, id int64) error {
 			lastErr = err.Error()
 			continue
 		}
-		// Respect the provider-side quota watermark (spec section 7): skip keys at >=90%.
+		// Quota-aware accelerator fallback: if the requested accelerator's quota is
+		// at/above the watermark, try GPUTypeFallback in order (GPU -> TPU -> CPU).
 		qctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 		q, qerr := c.provider.Quota(qctx, cred, "")
 		cancel()
-		if qerr == nil && q.Percent >= s.Cfg.QuotaHighWatermark {
+		effSpec := spec
+		if qerr == nil && len(q.GPUPercents) > 0 {
+			chosen := ""
+			for _, t := range append([]string{spec.GPUType}, spec.GPUTypeFallback...) {
+				if p, ok := q.GPUPercents[t]; ok && p < s.Cfg.QuotaHighWatermark {
+					chosen = t
+					break
+				}
+			}
+			if chosen == "" {
+				rejections[c.provider.ID()] = fmt.Sprintf("all accelerators at quota watermark (%.0f%%)", s.Cfg.QuotaHighWatermark*100)
+				tried--
+				continue
+			}
+			effSpec.GPUType = chosen // pass the actually-available accelerator to Submit
+		} else if qerr == nil && q.Percent >= s.Cfg.QuotaHighWatermark {
 			rejections[c.provider.ID()] = fmt.Sprintf("provider quota at %.0f%% (watermark %.0f%%)", q.Percent*100, s.Cfg.QuotaHighWatermark*100)
-			tried-- // this skip does not consume retry budget
+			tried--
 			continue
 		}
-		remoteID, err := c.provider.Submit(providers.WithJobContext(ctx, j.ID, j.Attempts+tried), cred, "", spec)
+		remoteID, err := c.provider.Submit(providers.WithJobContext(ctx, j.ID, j.Attempts+tried), cred, "", effSpec)
 		if err != nil {
 			s.onAttemptFailure(ctx, j, c, err)
 			lastErr = err.Error()

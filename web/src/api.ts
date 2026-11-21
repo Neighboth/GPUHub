@@ -265,6 +265,7 @@ export interface CreateJobBody {
   type: string;
   payload: string;
   gpu_type: string;
+  gpu_type_fallback?: string[];
   min_vram_gb: number;
   gpu_count: number;
   max_duration_seconds?: number | null;

@@ -20,16 +20,24 @@ function buildScript(modelId: ModelId, userMessage: string): string {
   const msg = JSON.stringify(userMessage);
   // Kaggle kernels AND self-hosted runners execute the payload as PYTHON code,
   // so the payload must be pure Python - never a bash script with pip install.
-  return `import subprocess, sys, json, time
-subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "llama-cpp-python", "huggingface_hub"])
-from huggingface_hub import hf_hub_download
+  return `import subprocess, sys, json, time, os, glob
+# Cold-start fix: prefer a persistent Kaggle Dataset mounted at /kaggle/input.
+# One-time setup: upload ${m.file} as a private Kaggle Dataset named "gpuhub-models"
+# (GPUHub looks in /kaggle/input/*gpuhub*/**/${m.file}). This makes starts ~5s
+# instead of re-downloading ~1 GB from HuggingFace every run.
+CACHE = glob.glob("/kaggle/input/**/${m.file}", recursive=True)
+if CACHE:
+    path = CACHE[0]
+    print("[gpuhub] model Kaggle Dataset cache'inden: " + path, flush=True)
+else:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "llama-cpp-python", "huggingface_hub"])
+    from huggingface_hub import hf_hub_download
+    t0 = time.time()
+    print("[gpuhub] cache yok, HF'den indiriliyor: ${m.repo} / ${m.file}", flush=True)
+    path = hf_hub_download("${m.repo}", filename="${m.file}")
+    print(f"[gpuhub] model hazir ({round(time.time()-t0,1)}s)", flush=True)
+
 from llama_cpp import Llama
-
-t0 = time.time()
-print("[gpuhub] model indiriliyor: ${m.repo} / ${m.file}", flush=True)
-path = hf_hub_download("${m.repo}", filename="${m.file}")
-print(f"[gpuhub] model hazir ({round(time.time()-t0,1)}s)", flush=True)
-
 llm = Llama(model_path=path, n_ctx=2048, verbose=False)
 print("[gpuhub] model yuklendi, q4", flush=True)
 
@@ -104,6 +112,7 @@ export default function AITest() {
         type: 'script',
         payload: buildScript(model, text),
         gpu_type: gpu,
+        gpu_type_fallback: gpu === 'T4' ? ['TPU', 'CPU'] : ['CPU'],
         min_vram_gb: m.vram,
         gpu_count: 1,
         max_duration_seconds: 1800,
@@ -189,7 +198,8 @@ export default function AITest() {
             <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-[11px] leading-relaxed text-zinc-400">
               <div className="flex items-center gap-1.5 font-medium text-zinc-300"><Info size={12} /> {L(lang, { en: 'How it works', tr: 'Nasıl çalışır' })}</div>
               <ul className="mt-2 list-disc space-y-1 pl-4">
-                <li>{L(lang, { en: 'GPUHub submits a script job to the selected provider.', tr: 'GPUHub seçilen sağlayıcıya script job gönderir.' })}</li>
+                <li>{L(lang, { en: 'GPUHub submits a script job: GPU (T4) -> TPU -> CPU fallback (quota-aware).', tr: 'GPUHub script job gönderir: GPU (T4) -> TPU -> CPU fallback (kota duyarlı).' })}</li>
+                <li>{L(lang, { en: 'Tip: add the Q4 GGUF as a private Kaggle Dataset "gpuhub-models" to skip the ~1 GB download (starts in ~5s).', tr: 'İpucu: Q4 GGUF dosyasını "gpuhub-models" adlı özel Kaggle Dataset olarak eklerseniz ~1 GB indirme atlanır (~5sn\'de başlar).' })}</li>
                 <li>{L(lang, { en: 'The provider downloads the Q4 GGUF and runs inference on its GPU.', tr: 'Sağlayıcı Q4 GGUF dosyasını indirip GPU\'sunda çalıştırır.' })}</li>
                 <li>{L(lang, { en: 'Logs are parsed and the model answer is shown here.', tr: 'Loglar ayrıştırılıp model cevabı burada gösterilir.' })}</li>
               </ul>
