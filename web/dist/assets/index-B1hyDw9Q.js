@@ -492,7 +492,7 @@ messages = [
 if hasattr(tok, "apply_chat_template"):
     prompt = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 else:
-    prompt = f"User: {${n}}\\nAssistant:"
+    prompt = "User: " + ${n} + "\\nAssistant:"
 
 inputs = tok(prompt, return_tensors="pt").to(device)
 with torch.no_grad():

@@ -25,7 +25,7 @@ RUN apk add --no-cache python3 py3-pip chromium nodejs npm \
 	&& addgroup -S gpuhub && adduser -S gpuhub -G gpuhub \
 	&& mkdir -p /data /ms-playwright && chown gpuhub:gpuhub /data /ms-playwright
 # Real provider runtimes: Modal SDK (gRPC) + Playwright for Colab web login.
-RUN pip3 install --no-cache-dir --break-system-packages modal playwright \
+RUN pip3 install --no-cache-dir --break-system-packages modal playwright requests \
 	&& PLAYWRIGHT_BROWSERS_PATH=/ms-playwright python3 -m playwright install --with-deps chromium 2>/dev/null || true
 USER gpuhub
 WORKDIR /app

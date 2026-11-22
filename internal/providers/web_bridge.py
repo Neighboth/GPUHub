@@ -43,6 +43,25 @@ def fail(msg):
 
 def _http_json(method, url, headers=None, data=None, timeout=30):
     hdrs = dict(headers or {})
+    try:
+        import requests as _req
+        kw = {"headers": hdrs, "timeout": timeout}
+        if data is not None:
+            if isinstance(data, (dict, list)):
+                kw["json"] = data
+            else:
+                kw["data"] = data
+        resp = _req.request(method, url, **kw)
+        raw = resp.text or ""
+        if resp.status_code >= 400:
+            path_only = urllib.parse.urlparse(url).path
+            raise RuntimeError(f"HTTP {resp.status_code} ({method} {path_only}): {raw[:300]}")
+        if raw.startswith(")]}'\n"):
+            raw = raw[5:]
+        return resp.status_code, (json.loads(raw) if raw.strip() else {})
+    except ImportError:
+        pass
+
     body = None
     if data is not None:
         if isinstance(data, (dict, list)):
@@ -64,7 +83,8 @@ def _http_json(method, url, headers=None, data=None, timeout=30):
             return resp.status, (json.loads(raw) if raw.strip() else {})
     except urllib.error.HTTPError as e:
         raw = e.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"HTTP {e.code}: {raw[:300]}")
+        path_only = urllib.parse.urlparse(url).path
+        raise RuntimeError(f"HTTP {e.code} ({method} {path_only}): {raw[:300]}")
 
 
 def _colab_exchange_token(req):
