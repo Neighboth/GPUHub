@@ -1,80 +1,206 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Sparkles, Send, Loader2, Cpu, Info, Server, MessageSquare, RotateCcw } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Sparkles, Send, Loader2, Info, MessageSquare, RotateCcw, Image as ImageIcon, Video, Download } from 'lucide-react';
 import { api, errorMessage, providerKeyCount, type Provider, type Job } from '../api';
 import ProviderIcon from '../components/ProviderIcon';
-import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Label, Select, Input, LoadingBlock } from '../components/ui';
+import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Label, Select, Input, Tabs } from '../components/ui';
 import { useLang, L } from '../i18n';
 
-// 1B-class GGUF models - small enough for every free-tier GPU, TPU, or CPU.
-const MODELS = [
-  { id: 'qwen2.5-1.5b', name: 'Qwen2.5 1.5B Instruct (Q4_K_M)', repo: 'Qwen/Qwen2.5-1.5B-Instruct-GGUF', file: 'qwen2.5-1.5b-instruct-q4_k_m.gguf', vram: 16 },
-  { id: 'qwen3-0.6b', name: 'Qwen3 0.6B (Q8_0 · 639 MB)', repo: 'Qwen/Qwen3-0.6B-GGUF', file: 'Qwen3-0.6B-Q8_0.gguf', vram: 8 },
-  { id: 'tinyllama-1.1b', name: 'TinyLlama 1.1B Chat (Q4_K_M)', repo: 'TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF', file: 'tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf', vram: 8 },
+type TaskMode = 'text' | 'image' | 'video';
+
+const TEXT_MODELS = [
+  { id: 'qwen2.5-1.5b', name: 'Qwen2.5 1.5B Instruct (Hızlı · Transformers)', repo: 'Qwen/Qwen2.5-1.5B-Instruct', vram: 16 },
+  { id: 'qwen3-0.6b', name: 'Qwen3 0.6B (Ultra Hızlı · Küçük)', repo: 'Qwen/Qwen3-0.6B', vram: 8 },
+  { id: 'tinyllama-1.1b', name: 'TinyLlama 1.1B Chat (Hafif · CPU Dostu)', repo: 'TinyLlama/TinyLlama-1.1B-Chat-v1.0', vram: 8 },
 ] as const;
 
-type ModelId = (typeof MODELS)[number]['id'];
+const IMAGE_MODELS = [
+  { id: 'sd-turbo', name: 'SD Turbo (1-2 Adım · Ultra Hızlı)', repo: 'stabilityai/sd-turbo', steps: 2, guidance: 0.0, vram: 16 },
+  { id: 'sdxl-turbo', name: 'SDXL Turbo (2 Adım · Yüksek Kalite)', repo: 'stabilityai/sdxl-turbo', steps: 2, guidance: 0.0, vram: 16 },
+  { id: 'lcm-dreamshaper', name: 'LCM Dreamshaper v7 (4 Adım · Artistik)', repo: 'SimianLuo/LCM_Dreamshaper_v7', steps: 4, guidance: 1.5, vram: 16 },
+  { id: 'tiny-sd', name: 'Tiny-SD (Hafif · CPU Dostu)', repo: 'segmind/tiny-sd', steps: 15, guidance: 7.5, vram: 8 },
+] as const;
 
-function buildScript(modelId: ModelId, userMessage: string): string {
-  const m = MODELS.find((x) => x.id === modelId)!;
-  // message is JSON-encoded so quoting is safe inside the Python heredoc.
+const VIDEO_MODELS = [
+  { id: 'ms-t2v-1.7b', name: 'ModelScope Text-to-Video 1.7B (MP4 · 16 Kare)', repo: 'ali-vilab/text-to-video-ms-1.7b', kind: 't2v', steps: 20, vram: 16 },
+  { id: 'zeroscope-v2', name: 'Zeroscope v2 576w (MP4 · Geniş Ekran)', repo: 'cerspense/zeroscope_v2_576w', kind: 't2v', steps: 20, vram: 16 },
+  { id: 'animatediff-lightning', name: 'AnimateDiff-Lightning (4 Adım · Hızlı)', repo: 'ByteDance/AnimateDiff-Lightning', kind: 'animatediff', steps: 4, vram: 16 },
+] as const;
+
+function buildTextScript(repo: string, userMessage: string): string {
   const msg = JSON.stringify(userMessage);
-  // Kaggle kernels AND self-hosted runners execute the payload as PYTHON code,
-  // so the payload must be pure Python - never a bash script with pip install.
-  return `import subprocess, sys, json, time, os, glob
+  return `import sys, subprocess, time, os
 t0 = time.time()
-# Cold-start fix: prefer a persistent Kaggle Dataset mounted at /kaggle/input.
-# One-time setup: upload ${m.file} as a private Kaggle Dataset named "gpuhub-models"
-# (GPUHub looks in /kaggle/input/*gpuhub*/**/${m.file}). This makes starts ~5s
-# instead of re-downloading ~1 GB from HuggingFace every run.
-CACHE = glob.glob("/kaggle/input/**/${m.file}", recursive=True)
-print("[gpuhub] paketler hazirlaniyor...", flush=True)
-subprocess.check_call([
-    sys.executable, "-m", "pip", "install", "-q", "--prefer-binary",
-    "--extra-index-url", "https://abetlen.github.io/llama-cpp-python/whl/cpu",
-    "llama-cpp-python", "huggingface_hub",
-])
-if CACHE:
-    path = CACHE[0]
-    print("[gpuhub] model Kaggle Dataset cache'inden: " + path, flush=True)
-else:
-    from huggingface_hub import hf_hub_download, list_repo_files
-    repo_id = "${m.repo}"
-    target_file = "${m.file}"
-    try:
-        print(f"[gpuhub] cache yok, HF'den indiriliyor: {repo_id} / {target_file}", flush=True)
-        path = hf_hub_download(repo_id, filename=target_file)
-    except Exception as e:
-        print(f"[gpuhub] {target_file} bulunamadi ({e}), repo icindeki GGUF dosyalari araniyor...", flush=True)
-        ggufs = [f for f in list_repo_files(repo_id) if f.lower().endswith(".gguf")]
-        if not ggufs:
-            raise RuntimeError(f"{repo_id} icinde hic .gguf dosyasi bulunamadi")
-        preferred = next((f for f in ggufs if "q4_k_m" in f.lower() or "q8_0" in f.lower()), ggufs[0])
-        print(f"[gpuhub] alternatif GGUF indiriliyor: {preferred}", flush=True)
-        path = hf_hub_download(repo_id, filename=preferred)
-    print(f"[gpuhub] model hazir ({round(time.time()-t0,1)}s)", flush=True)
+try:
+    import torch, transformers
+except ImportError:
+    print("[gpuhub] torch/transformers kuruluyor...", flush=True)
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "torch", "transformers", "accelerate"])
+    import torch, transformers
 
-from llama_cpp import Llama
-llm = Llama(model_path=path, n_ctx=2048, verbose=False)
-print("[gpuhub] model yuklendi, q4", flush=True)
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+dtype = torch.float16 if device == "cuda" else torch.float32
+print(f"[gpuhub] cihaz={device} dtype={dtype} model=${repo}", flush=True)
+
+tok = AutoTokenizer.from_pretrained(${JSON.stringify(repo)}, trust_remote_code=True)
+model = AutoModelForCausalLM.from_pretrained(${JSON.stringify(repo)}, torch_dtype=dtype, low_cpu_mem_usage=True, trust_remote_code=True)
+model = model.to(device)
+print(f"[gpuhub] model yuklendi ({round(time.time()-t0, 1)}s)", flush=True)
 
 messages = [
-  {"role": "system", "content": "You are a concise, friendly assistant. Reply in the same language as the user."},
-  {"role": "user", "content": ${msg}},
+    {"role": "system", "content": "You are a concise, helpful assistant. Reply in the same language as the user."},
+    {"role": "user", "content": ${msg}},
 ]
-out = llm.create_chat_completion(messages=messages, max_tokens=256, temperature=0.7)
-answer = out["choices"][0]["message"]["content"]
-u = out.get("usage", {})
+if hasattr(tok, "apply_chat_template"):
+    prompt = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+else:
+    prompt = f"User: {${msg}}\\nAssistant:"
+
+inputs = tok(prompt, return_tensors="pt").to(device)
+with torch.no_grad():
+    out = model.generate(**inputs, max_new_tokens=220, do_sample=True, temperature=0.7, top_p=0.9)
+gen_ids = out[0][inputs["input_ids"].shape[1]:]
+answer = tok.decode(gen_ids, skip_special_tokens=True).strip()
+
 print("=== GPUHUB_MODEL_ANSWER_START ===", flush=True)
 print(answer, flush=True)
 print("=== GPUHUB_MODEL_ANSWER_END ===", flush=True)
-print(f"[gpuhub] prompt_tokens={u.get('prompt_tokens')} completion_tokens={u.get('completion_tokens')}", flush=True)
-print(f"[gpuhub] toplam_sure={round(time.time()-t0,1)}s", flush=True)
+print(f"[gpuhub] toplam_sure={round(time.time()-t0, 1)}s", flush=True)
 `;
 }
 
-function extractAnswer(logs: string | null | undefined): { answer: string; meta: string } {
+function buildImageScript(repo: string, steps: number, guidance: number, prompt: string): string {
+  const p = JSON.stringify(prompt);
+  return `import sys, subprocess, time, io, base64
+t0 = time.time()
+try:
+    import torch, diffusers
+    from PIL import Image
+except ImportError:
+    print("[gpuhub] diffusers/pillow kuruluyor...", flush=True)
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "torch", "diffusers", "transformers", "accelerate", "pillow"])
+    import torch, diffusers
+    from PIL import Image
+
+from diffusers import AutoPipelineForText2Image
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+dtype = torch.float16 if device == "cuda" else torch.float32
+print(f"[gpuhub] resim modeli yukleniyor: ${repo} ({device})", flush=True)
+
+kwargs = {"torch_dtype": dtype}
+if device == "cuda":
+    kwargs["variant"] = "fp16"
+try:
+    pipe = AutoPipelineForText2Image.from_pretrained(${JSON.stringify(repo)}, **kwargs)
+except Exception:
+    pipe = AutoPipelineForText2Image.from_pretrained(${JSON.stringify(repo)}, torch_dtype=dtype)
+pipe = pipe.to(device)
+if hasattr(pipe, "set_progress_bar_config"):
+    pipe.set_progress_bar_config(disable=True)
+print(f"[gpuhub] model hazir ({round(time.time()-t0, 1)}s), uretiliyor...", flush=True)
+
+img = pipe(prompt=${p}, num_inference_steps=${steps}, guidance_scale=${guidance}, width=512, height=512).images[0]
+buf = io.BytesIO()
+img.save(buf, format="PNG")
+b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+
+print("=== GPUHUB_IMAGE_BASE64_START ===", flush=True)
+print(b64, flush=True)
+print("=== GPUHUB_IMAGE_BASE64_END ===", flush=True)
+print(f"[gpuhub] toplam_sure={round(time.time()-t0, 1)}s", flush=True)
+`;
+}
+
+function buildVideoScript(repo: string, kind: string, steps: number, prompt: string): string {
+  const p = JSON.stringify(prompt);
+  return `import sys, subprocess, time, io, base64, tempfile, os
+t0 = time.time()
+try:
+    import torch, diffusers, imageio
+    from PIL import Image
+except ImportError:
+    print("[gpuhub] diffusers/imageio kuruluyor...", flush=True)
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "torch", "diffusers", "transformers", "accelerate", "imageio", "imageio-ffmpeg", "pillow"])
+    import torch, diffusers, imageio
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+dtype = torch.float16 if device == "cuda" else torch.float32
+print(f"[gpuhub] video modeli yukleniyor: ${repo} ({device})", flush=True)
+
+if ${JSON.stringify(kind)} == "animatediff":
+    from diffusers import AnimateDiffPipeline, MotionAdapter, EulerDiscreteScheduler
+    from huggingface_hub import hf_hub_download
+    from safetensors.torch import load_file
+    adapter = MotionAdapter().to(device, dtype)
+    ckpt = hf_hub_download(${JSON.stringify(repo)}, "animatediff_lightning_4step_diffusers.safetensors")
+    adapter.load_state_dict(load_file(ckpt, device=device))
+    pipe = AnimateDiffPipeline.from_pretrained("emilianJR/epiCRealism", motion_adapter=adapter, torch_dtype=dtype).to(device)
+    pipe.scheduler = EulerDiscreteScheduler.from_config(pipe.scheduler.config, timestep_spacing="trailing", beta_schedule="linear")
+    frames = pipe(prompt=${p}, guidance_scale=1.0, num_inference_steps=${steps}, num_frames=16).frames[0]
+else:
+    from diffusers import DiffusionPipeline
+    try:
+        pipe = DiffusionPipeline.from_pretrained(${JSON.stringify(repo)}, torch_dtype=dtype, variant="fp16")
+    except Exception:
+        pipe = DiffusionPipeline.from_pretrained(${JSON.stringify(repo)}, torch_dtype=dtype)
+    pipe = pipe.to(device)
+    if hasattr(pipe, "enable_model_cpu_offload") and device == "cuda":
+        pass
+    frames = pipe(${p}, num_inference_steps=${steps}, num_frames=16).frames[0]
+
+import numpy as np
+np_frames = [np.array(f) if not isinstance(f, np.ndarray) else (f * 255).astype("uint8") if f.dtype != np.uint8 else f for f in frames]
+
+out_path = os.path.join(tempfile.gettempdir(), "gpuhub_video.mp4")
+fmt = "mp4"
+try:
+    imageio.mimsave(out_path, np_frames, fps=8)
+except Exception:
+    out_path = os.path.join(tempfile.gettempdir(), "gpuhub_video.gif")
+    fmt = "gif"
+    imageio.mimsave(out_path, np_frames, fps=8)
+
+with open(out_path, "rb") as f:
+    b64 = base64.b64encode(f.read()).decode("ascii")
+
+print("=== GPUHUB_VIDEO_FMT ===" + fmt, flush=True)
+print("=== GPUHUB_VIDEO_BASE64_START ===", flush=True)
+print(b64, flush=True)
+print("=== GPUHUB_VIDEO_BASE64_END ===", flush=True)
+print(f"[gpuhub] toplam_sure={round(time.time()-t0, 1)}s", flush=True)
+`;
+}
+
+function extractResult(logs: string | null | undefined): {
+  answer: string;
+  imageB64?: string;
+  videoB64?: string;
+  videoFmt?: 'mp4' | 'gif';
+  meta: string;
+} {
   if (!logs) return { answer: '(log yok)', meta: '' };
   const s = String(logs);
+
+  const imgA = s.indexOf('=== GPUHUB_IMAGE_BASE64_START ===');
+  const imgB = s.indexOf('=== GPUHUB_IMAGE_BASE64_END ===');
+  if (imgA >= 0 && imgB > imgA) {
+    const b64 = s.slice(imgA + '=== GPUHUB_IMAGE_BASE64_START ==='.length, imgB).replace(/\s+/g, '');
+    const meta = (s.slice(0, imgA) + '\n' + s.slice(imgB + '=== GPUHUB_IMAGE_BASE64_END ==='.length)).trim();
+    return { answer: 'Resim oluşturuldu:', imageB64: b64, meta };
+  }
+
+  const vidA = s.indexOf('=== GPUHUB_VIDEO_BASE64_START ===');
+  const vidB = s.indexOf('=== GPUHUB_VIDEO_BASE64_END ===');
+  if (vidA >= 0 && vidB > vidA) {
+    const b64 = s.slice(vidA + '=== GPUHUB_VIDEO_BASE64_START ==='.length, vidB).replace(/\s+/g, '');
+    const fmtMatch = s.match(/=== GPUHUB_VIDEO_FMT ===(mp4|gif)/);
+    const fmt = (fmtMatch?.[1] as 'mp4' | 'gif') || 'mp4';
+    const meta = (s.slice(0, vidA) + '\n' + s.slice(vidB + '=== GPUHUB_VIDEO_BASE64_END ==='.length)).trim();
+    return { answer: 'Video oluşturuldu:', videoB64: b64, videoFmt: fmt, meta };
+  }
+
   const a = s.indexOf('=== GPUHUB_MODEL_ANSWER_START ===');
   const b = s.indexOf('=== GPUHUB_MODEL_ANSWER_END ===');
   let answer = s;
@@ -86,12 +212,23 @@ function extractAnswer(logs: string | null | undefined): { answer: string; meta:
   return { answer, meta };
 }
 
-type ChatTurn = { role: 'user' | 'assistant'; text: string; job?: Job; meta?: string };
+type ChatTurn = {
+  role: 'user' | 'assistant';
+  text: string;
+  imageB64?: string;
+  videoB64?: string;
+  videoFmt?: 'mp4' | 'gif';
+  job?: Job;
+  meta?: string;
+};
 
 export default function AITest() {
   const lang = useLang();
   const [providers, setProviders] = useState<Provider[]>([]);
-  const [model, setModel] = useState<ModelId>('qwen2.5-1.5b');
+  const [mode, setMode] = useState<TaskMode>('text');
+  const [textModel, setTextModel] = useState<string>(TEXT_MODELS[0].id);
+  const [imageModel, setImageModel] = useState<string>(IMAGE_MODELS[0].id);
+  const [videoModel, setVideoModel] = useState<string>(VIDEO_MODELS[0].id);
   const [gpu, setGpu] = useState('T4');
   const [provider, setProvider] = useState('kaggle');
   const [message, setMessage] = useState('');
@@ -99,7 +236,6 @@ export default function AITest() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const [liveLogs, setLiveLogs] = useState('');
-  const [elapsed, setElapsed] = useState(0);
   const stopRef = useRef(false);
 
   useEffect(() => {
@@ -124,7 +260,6 @@ export default function AITest() {
         { type: 'TPU', vram_gb: 0 },
         { type: 'CPU', vram_gb: 0 },
       ];
-  // Always ensure CPU is selectable as an option even if provider capabilities didn't list it.
   const providerGPUs = rawGPUs.some((g) => g.type === 'CPU')
     ? rawGPUs
     : [...rawGPUs, { type: 'CPU', vram_gb: 0 }];
@@ -135,7 +270,12 @@ export default function AITest() {
     }
   }, [provider, providerGPUs, gpu]);
 
-  const m = MODELS.find((x) => x.id === model)!;
+  const activeModelMeta =
+    mode === 'text'
+      ? TEXT_MODELS.find((x) => x.id === textModel) ?? TEXT_MODELS[0]
+      : mode === 'image'
+        ? IMAGE_MODELS.find((x) => x.id === imageModel) ?? IMAGE_MODELS[0]
+        : VIDEO_MODELS.find((x) => x.id === videoModel) ?? VIDEO_MODELS[0];
 
   async function send() {
     const text = message.trim();
@@ -144,18 +284,29 @@ export default function AITest() {
     setTurns((prev) => [...prev, { role: 'user', text }]);
     setBusy(true);
     setLiveLogs('');
-    setElapsed(0);
     setStatus(L(lang, { en: 'Submitting job to provider…', tr: 'Sağlayıcıya job gönderiliyor…' }));
     stopRef.current = false;
     const t0 = Date.now();
     try {
+      let payload = '';
+      if (mode === 'text') {
+        const tm = TEXT_MODELS.find((x) => x.id === textModel) ?? TEXT_MODELS[0];
+        payload = buildTextScript(tm.repo, text);
+      } else if (mode === 'image') {
+        const im = IMAGE_MODELS.find((x) => x.id === imageModel) ?? IMAGE_MODELS[0];
+        payload = buildImageScript(im.repo, im.steps, im.guidance, text);
+      } else {
+        const vm = VIDEO_MODELS.find((x) => x.id === videoModel) ?? VIDEO_MODELS[0];
+        payload = buildVideoScript(vm.repo, vm.kind, vm.steps, text);
+      }
+
       const fallback = gpu === 'CPU' ? [] : gpu === 'TPU' ? ['CPU'] : gpu === 'T4' ? ['TPU', 'CPU'] : ['CPU'];
       const job = await api.createJob({
         type: 'script',
-        payload: buildScript(model, text),
+        payload,
         gpu_type: gpu,
         gpu_type_fallback: fallback,
-        min_vram_gb: gpu === 'CPU' || gpu === 'TPU' ? 1 : m.vram,
+        min_vram_gb: gpu === 'CPU' || gpu === 'TPU' ? 0 : activeModelMeta.vram,
         gpu_count: 1,
         max_duration_seconds: 1800,
         provider_preference: [provider],
@@ -165,22 +316,30 @@ export default function AITest() {
       const deadline = Date.now() + 20 * 60 * 1000;
       let last: Job = job;
       while (Date.now() < deadline && !stopRef.current) {
-        await new Promise((r) => setTimeout(r, 2500));
+        await new Promise((r) => setTimeout(r, 2000));
         last = await api.job(String(job.id));
         const st = String(last.status ?? '').toLowerCase();
         const secs = Math.round((Date.now() - t0) / 1000);
-        setElapsed(secs);
         const providerName = last.provider_name ?? (typeof last.provider === 'object' ? last.provider?.id : last.provider) ?? '-';
         setStatus(`Job #${job.id}: ${st} · ${secs}s · ${providerName} · attempt ${Array.isArray(last.attempts) ? last.attempts.length : 0}`);
-        // Show live provider logs so the wait is transparent (model download etc.)
         if (last.logs) setLiveLogs(last.logs);
         if (['succeeded', 'failed', 'cancelled', 'timeout', 'unschedulable'].includes(st)) break;
       }
-      // Final refresh: scheduler may write logs a moment after status flips.
       try { last = await api.job(String(job.id)); } catch { /* keep last */ }
-      const { answer, meta } = extractAnswer(last.logs);
+      const parsed = extractResult(last.logs);
       setLiveLogs('');
-      setTurns((prev) => [...prev, { role: 'assistant', text: answer, job: last, meta }]);
+      setTurns((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          text: parsed.answer,
+          imageB64: parsed.imageB64,
+          videoB64: parsed.videoB64,
+          videoFmt: parsed.videoFmt,
+          job: last,
+          meta: parsed.meta,
+        },
+      ]);
       setStatus('');
     } catch (e) {
       setTurns((prev) => [...prev, { role: 'assistant', text: `Hata: ${errorMessage(e)}` }]);
@@ -199,15 +358,29 @@ export default function AITest() {
             {L(lang, { en: 'AI Test', tr: 'AI Testi' })}
           </h1>
           <p className="mt-1 text-xs text-zinc-500">
-            {L(lang, { en: 'Chat with a 1B Q4 model running on a free GPU provider server.', tr: 'Ücretsiz GPU sağlayıcısı sunucusunda çalışan 1B Q4 model ile sohbet edin.' })}
+            {L(lang, {
+              en: 'Run Text, Image, or Video generation models on your free GPU/CPU providers.',
+              tr: 'Ücretsiz GPU/CPU sağlayıcılarınız üzerinde Metin, Resim ve Video oluşturma modellerini çalıştırın.',
+            })}
           </p>
         </div>
-        <Button size="sm" variant="outline" onClick={() => setTurns([])}>
-          <RotateCcw size={13} /> {L(lang, { en: 'Clear chat', tr: 'Sohbeti temizle' })}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Tabs
+            value={mode}
+            onChange={(v) => setMode(v as TaskMode)}
+            tabs={[
+              { id: 'text', label: L(lang, { en: 'Text / Chat', tr: 'Metin / Sohbet' }) },
+              { id: 'image', label: L(lang, { en: 'Image Gen', tr: 'Resim Oluşturma' }) },
+              { id: 'video', label: L(lang, { en: 'Video Gen', tr: 'Video Oluşturma' }) },
+            ]}
+          />
+          <Button size="sm" variant="outline" onClick={() => setTurns([])}>
+            <RotateCcw size={13} /> {L(lang, { en: 'Clear', tr: 'Temizle' })}
+          </Button>
+        </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
+      <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
         {/* Controls */}
         <Card>
           <CardHeader><CardTitle>{L(lang, { en: 'Configuration', tr: 'Yapılandırma' })}</CardTitle></CardHeader>
@@ -235,52 +408,124 @@ export default function AITest() {
               </Select>
             </div>
             <div>
-              <Label htmlFor="ai-model">{L(lang, { en: 'Model (1B, Q4)', tr: 'Model (1B, Q4)' })}</Label>
-              <Select id="ai-model" value={model} onChange={(e) => setModel(e.target.value as ModelId)}>
-                {MODELS.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-              </Select>
+              <Label htmlFor="ai-model">
+                {mode === 'text'
+                  ? L(lang, { en: 'Text Model', tr: 'Metin Modeli' })
+                  : mode === 'image'
+                    ? L(lang, { en: 'Image Model', tr: 'Resim Modeli' })
+                    : L(lang, { en: 'Video Model', tr: 'Video Modeli' })}
+              </Label>
+              {mode === 'text' && (
+                <Select id="ai-model" value={textModel} onChange={(e) => setTextModel(e.target.value)}>
+                  {TEXT_MODELS.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                </Select>
+              )}
+              {mode === 'image' && (
+                <Select id="ai-model" value={imageModel} onChange={(e) => setImageModel(e.target.value)}>
+                  {IMAGE_MODELS.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                </Select>
+              )}
+              {mode === 'video' && (
+                <Select id="ai-model" value={videoModel} onChange={(e) => setVideoModel(e.target.value)}>
+                  {VIDEO_MODELS.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                </Select>
+              )}
             </div>
             <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-[11px] leading-relaxed text-zinc-400">
-              <div className="flex items-center gap-1.5 font-medium text-zinc-300"><Info size={12} /> {L(lang, { en: 'How it works', tr: 'Nasıl çalışır' })}</div>
+              <div className="flex items-center gap-1.5 font-medium text-zinc-300"><Info size={12} /> {L(lang, { en: 'Warm Cache & Auto-Shutdown', tr: 'Hızlı Önbellek & Oto-Kapanma' })}</div>
               <ul className="mt-2 list-disc space-y-1 pl-4">
-                <li>{L(lang, { en: 'GPUHub submits a script job: GPU (T4) -> TPU -> CPU fallback (quota-aware).', tr: 'GPUHub script job gönderir: GPU (T4) -> TPU -> CPU fallback (kota duyarlı).' })}</li>
-                <li>{L(lang, { en: 'Tip: add the Q4 GGUF as a private Kaggle Dataset "gpuhub-models" to skip the ~1 GB download (starts in ~5s).', tr: 'İpucu: Q4 GGUF dosyasını "gpuhub-models" adlı özel Kaggle Dataset olarak eklerseniz ~1 GB indirme atlanır (~5sn\'de başlar).' })}</li>
-                <li>{L(lang, { en: 'The provider downloads the Q4 GGUF and runs inference on its GPU.', tr: 'Sağlayıcı Q4 GGUF dosyasını indirip GPU\'sunda çalıştırır.' })}</li>
-                <li>{L(lang, { en: 'Logs are parsed and the model answer is shown here.', tr: 'Loglar ayrıştırılıp model cevabı burada gösterilir.' })}</li>
+                <li>{L(lang, { en: 'First run caches the model; subsequent messages run in seconds on warm Modal/Colab containers.', tr: 'İlk çalıştırmada model önbelleğe alınır; sonraki mesajlar sıcak Modal/Colab sunucularında saniyeler içinde çalışır.' })}</li>
+                <li>{L(lang, { en: 'Containers automatically shut down after 5–10 min of idle time so your quota is never drained 24/7.', tr: 'Sunucular 5–10 dk boşta kaldığında otomatik kapanır; kotanız 7/24 boşa harcanmaz.' })}</li>
+                <li>{L(lang, { en: 'Uses pre-installed PyTorch & Transformers (zero C++ compilation).', tr: 'Hazır PyTorch & Transformers kullanır (C++ derleme beklemesi yok).' })}</li>
               </ul>
-              <div className="mt-2 text-zinc-500">Repos: {MODELS.map((x) => x.repo).join(', ')}</div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Chat */}
-        <Card className="flex min-h-[520px] flex-col">
+        {/* Chat / Output */}
+        <Card className="flex min-h-[540px] flex-col">
           <CardHeader className="flex-row items-center justify-between">
-            <CardTitle className="flex items-center gap-2"><MessageSquare size={15} /> {L(lang, { en: 'Chat', tr: 'Sohbet' })}</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              {mode === 'text' ? <MessageSquare size={15} /> : mode === 'image' ? <ImageIcon size={15} /> : <Video size={15} />}
+              {mode === 'text'
+                ? L(lang, { en: 'Chat', tr: 'Sohbet' })
+                : mode === 'image'
+                  ? L(lang, { en: 'Image Studio', tr: 'Resim Stüdyosu' })
+                  : L(lang, { en: 'Video Studio', tr: 'Video Stüdyosu' })}
+            </CardTitle>
             <div className="flex items-center gap-2 text-[11px] text-zinc-500">
-              <ProviderIcon id={provider} size={14} /> {provider} <Badge variant="neutral">{gpu}</Badge> <Badge variant="neutral">{m.name.split(' ')[0]}</Badge>
+              <ProviderIcon id={provider} size={14} /> {provider} <Badge variant="neutral">{gpu}</Badge> <Badge variant="accent">{activeModelMeta.repo.split('/')[1]}</Badge>
             </div>
           </CardHeader>
           <CardContent className="flex flex-1 flex-col">
-            <div className="min-h-[320px] flex-1 space-y-3 overflow-y-auto pr-1">
+            <div className="min-h-[340px] flex-1 space-y-3 overflow-y-auto pr-1">
               {turns.length === 0 && (
                 <div className="flex h-full items-center justify-center text-sm text-zinc-600">
-                  {L(lang, { en: 'Send a message to start.', tr: 'Başlamak için bir mesaj gönderin.' })}
+                  {mode === 'text'
+                    ? L(lang, { en: 'Send a message to start.', tr: 'Başlamak için bir mesaj gönderin.' })
+                    : mode === 'image'
+                      ? L(lang, { en: 'Describe the image you want to generate (e.g. "a cyberpunk cat in neon rain").', tr: 'Oluşturmak istediğiniz resmi tarif edin (örn. "a cyberpunk cat in neon rain").' })
+                      : L(lang, { en: 'Describe the video scene to generate (e.g. "astronaut riding a horse on mars").', tr: 'Oluşturmak istediğiniz video sahnesini tarif edin (örn. "astronaut riding a horse on mars").' })}
                 </div>
               )}
               {turns.map((t, i) => (
                 <div key={i} className={`flex ${t.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${
+                  <div className={`max-w-[85%] rounded-xl px-3.5 py-2.5 text-sm ${
                     t.role === 'user' ? 'bg-emerald-500/15 text-emerald-100' : 'bg-zinc-800/80 text-zinc-200'
                   }`}>
                     <div className="whitespace-pre-wrap break-words">{t.text}</div>
+
+                    {t.imageB64 && (
+                      <div className="mt-2 space-y-2">
+                        <img
+                          src={`data:image/png;base64,${t.imageB64}`}
+                          alt="Generated"
+                          className="max-h-96 rounded-lg border border-zinc-700 object-contain"
+                        />
+                        <a
+                          href={`data:image/png;base64,${t.imageB64}`}
+                          download={`gpuhub-image-${Date.now()}.png`}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-300 hover:bg-emerald-500/20"
+                        >
+                          <Download size={12} /> {L(lang, { en: 'Download PNG', tr: 'Resmi İndir (PNG)' })}
+                        </a>
+                      </div>
+                    )}
+
+                    {t.videoB64 && (
+                      <div className="mt-2 space-y-2">
+                        {t.videoFmt === 'gif' ? (
+                          <img
+                            src={`data:image/gif;base64,${t.videoB64}`}
+                            alt="Generated animation"
+                            className="max-h-96 rounded-lg border border-zinc-700"
+                          />
+                        ) : (
+                          <video
+                            src={`data:video/mp4;base64,${t.videoB64}`}
+                            controls
+                            autoPlay
+                            loop
+                            muted
+                            className="max-h-96 rounded-lg border border-zinc-700"
+                          />
+                        )}
+                        <a
+                          href={`data:${t.videoFmt === 'gif' ? 'image/gif' : 'video/mp4'};base64,${t.videoB64}`}
+                          download={`gpuhub-video-${Date.now()}.${t.videoFmt || 'mp4'}`}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-300 hover:bg-emerald-500/20"
+                        >
+                          <Download size={12} /> {L(lang, { en: 'Download Video', tr: 'Videoyu İndir' })}
+                        </a>
+                      </div>
+                    )}
+
                     {t.job && (
                       <div className="mt-2 border-t border-zinc-700/60 pt-2 text-[11px] text-zinc-400">
                         <div className="flex flex-wrap items-center gap-2">
                           <Badge variant={t.job.status === 'succeeded' ? 'success' : 'danger'}>{t.job.status}</Badge>
                           <span>Job #{t.job.id}</span>
                           {t.job.provider && <span>provider={String(t.job.provider)}</span>}
-                          {t.job.min_vram_gb != null && <span>VRAM≥{t.job.min_vram_gb}GB</span>}
                         </div>
                         {t.meta && (
                           <details className="mt-2">
@@ -297,9 +542,6 @@ export default function AITest() {
             {status && (
               <div className="mt-2 space-y-2">
                 <div className="flex items-center gap-2 text-xs text-emerald-400"><Loader2 size={13} className="animate-spin" />{status}</div>
-                <p className="text-[11px] text-zinc-500">
-                  {L(lang, { en: 'First run downloads ~1 GB model to the provider GPU - this usually takes 2-5 minutes. Live provider log below.', tr: 'İlk çalıştırmada sağlayıcı GPU\'suna ~1 GB model indirilir - genelde 2-5 dakika sürer. Canlı sağlayıcı logu aşağıda.' })}
-                </p>
                 {liveLogs && (
                   <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded bg-zinc-950 p-2 text-[10px] leading-relaxed text-zinc-400">{liveLogs.slice(-1500)}</pre>
                 )}
@@ -309,10 +551,25 @@ export default function AITest() {
               className="mt-3 flex items-center gap-2"
               onSubmit={(e) => { e.preventDefault(); void send(); }}
             >
-              <Input value={message} onChange={(e) => setMessage(e.target.value)} placeholder={L(lang, { en: 'Ask the model something…', tr: 'Modele bir şey sorun…' })} disabled={busy} />
+              <Input
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder={
+                  mode === 'text'
+                    ? L(lang, { en: 'Ask the model something…', tr: 'Modele bir şey sorun…' })
+                    : mode === 'image'
+                      ? L(lang, { en: 'Enter image prompt (English works best)…', tr: 'Resim promptu girin (İngilizce en iyi sonucu verir)…' })
+                      : L(lang, { en: 'Enter video prompt (English works best)…', tr: 'Video promptu girin (İngilizce en iyi sonucu verir)…' })
+                }
+                disabled={busy}
+              />
               <Button variant="primary" type="submit" disabled={busy || !message.trim()}>
                 {busy ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
-                {L(lang, { en: 'Send', tr: 'Gönder' })}
+                {mode === 'text'
+                  ? L(lang, { en: 'Send', tr: 'Gönder' })
+                  : mode === 'image'
+                    ? L(lang, { en: 'Generate', tr: 'Oluştur' })
+                    : L(lang, { en: 'Generate', tr: 'Oluştur' })}
               </Button>
             </form>
           </CardContent>
