@@ -56,9 +56,12 @@ function credentialFieldsFor(providerId: string): CredField[] {
       return [
         {
           key: 'token',
-          label: { en: 'Google OAuth2 code (4/…) or refresh token (1//…)', tr: 'Google OAuth2 yetki kodu (4/…) veya refresh token (1//…)' },
-          placeholder: '4/0A… veya 1//0…',
-          secret: true,
+          label: {
+            en: 'Redirected localhost URL (http://localhost…/?code=4/…), OAuth code (4/…), or refresh token (1//…)',
+            tr: 'Yönlendirilen localhost URL’si (http://localhost…/?code=4/…), yetki kodu (4/…) veya refresh token (1//…)',
+          },
+          placeholder: 'http://localhost:8080/oauth/callback?code=4/0A… veya 4/0A…',
+          secret: false,
         },
       ];
     case 'modal':
@@ -187,6 +190,16 @@ export default function Providers() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    function onMsg(ev: MessageEvent) {
+      if (ev.data && typeof ev.data === 'object' && ev.data.type === 'gpuhub_colab_code' && ev.data.code) {
+        setCredValues((prev) => ({ ...prev, token: String(ev.data.code) }));
+      }
+    }
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
 
   function onToggle(p: Provider, next: boolean) {
     setToggleBusy(p.id);
@@ -436,10 +449,10 @@ export default function Providers() {
                 <div className="text-xs font-semibold text-emerald-300">
                   {L(lang, { en: 'Google Colab OAuth2 (No App Password Needed)', tr: 'Google Colab OAuth2 (Uygulama Şifresi Gerekmez)' })}
                 </div>
-                <p className="text-[11px] leading-relaxed text-zinc-400">
+                <p className="whitespace-pre-line text-[11px] leading-relaxed text-zinc-400">
                   {L(lang, {
-                    en: 'Google App Passwords cannot start/stop Colab runtimes. Click below to sign in with Google, copy the authorization code shown on the page, and paste it into the box below. GPUHub automatically converts it into a permanent refresh token.',
-                    tr: 'Google uygulama şifresi ile Colab sunucusu açılıp kapatılamaz. Aşağıdaki butona tıklayıp Google ile giriş yapın, ekranda çıkan yetki kodunu (4/...) kopyalayıp alttaki kutuya yapıştırın. GPUHub bunu otomatik olarak kalıcı OAuth tokena çevirir.',
+                    en: '1. Click the button below and sign in with your Google account.\n2. Google will redirect your browser to http://localhost:8080/oauth/callback?code=4/0A… (even if that page says "This site can’t be reached" when GPUHub is on a remote server/CasaOS, that is normal!).\n3. Copy the entire http://localhost:8080/oauth/callback?code=… URL from your browser’s address bar and paste it into the box below.',
+                    tr: '1. Aşağıdaki butona tıklayıp Google hesabınızla giriş yapın ve izin verin.\n2. Google tarayıcınızı http://localhost:8080/oauth/callback?code=4/0A… adresine yönlendirecektir (GPUHub CasaOS/uzak sunucuda çalışıyorsa "Bu siteye ulaşılamıyor" yazması normaldir!).\n3. Tarayıcınızın en üstündeki adres çubuğundan o http://localhost:8080/oauth/callback?code=… URL’sinin tamamını kopyalayıp alttaki kutuya yapıştırın.',
                   })}
                 </p>
                 {colabOAuthUrl && (

@@ -40,7 +40,7 @@ func NewRunner() *runnerAdapter {
 		GPUs: []GPU{
 			gpu("T4", 16, 8), gpu("L4", 24, 8), gpu("A10", 24, 8), gpu("L40S", 48, 8),
 			gpu("A100", 40, 8), gpu("A100", 80, 8), gpu("H100", 80, 8),
-			gpu("RTX4090", 24, 8), gpu("RTX6000Pro", 96, 8), gpu("MI300X", 192, 8), gpu("Gaudi2", 96, 8),
+			gpu("RTX4090", 24, 8), gpu("RTX6000Pro", 96, 8), gpu("MI300X", 192, 8), gpu("Gaudi2", 96, 8), gpu("CPU", 0, 8),
 		},
 		MaxDurationHours: 24, Frameworks: []string{"pytorch", "tensorflow", "jax", "any"},
 		Notebooks: false, Docker: true, SSH: true,

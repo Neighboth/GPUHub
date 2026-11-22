@@ -319,10 +319,12 @@ func floatVal(v any) float64 {
 const (
 	colabOAuthClientID     = "764086051850-6qr4p6gpi6hn506pt8ejuq83di341hur.apps.googleusercontent.com"
 	colabOAuthClientSecret = "d-FL95Q19q7MQmFpd7hHD0Ty"
-	colabOAuthRedirectURI  = "https://sdk.cloud.google.com/applicationdefaultauthcode.html"
+	colabOAuthRedirectURI  = "http://localhost:8080/oauth/callback"
 )
 
 // ColabOAuthURL returns Google's official OAuth2 consent URL used by google-colab-cli.
+// Note: Google's desktop OAuth client 764086051850-6qr4p... only allows http://localhost
+// loopback redirect URIs.
 func ColabOAuthURL() string {
 	v := url.Values{
 		"client_id":     {colabOAuthClientID},
@@ -331,12 +333,42 @@ func ColabOAuthURL() string {
 		"scope":         {"openid https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/colaboratory https://www.googleapis.com/auth/drive.file"},
 		"access_type":   {"offline"},
 		"prompt":        {"consent"},
-		"token_usage":   {"remote"},
 	}
-	return "https://accounts.google.com/o/oauth2/auth?" + v.Encode()
+	return "https://accounts.google.com/o/oauth2/v2/auth?" + v.Encode()
 }
 
-// ExchangeColabCredential exchanges a one-time Google authorization code (4/...)
+// extractOAuthCodeFromInput extracts the `code` query parameter if the user pasted
+// the full http://localhost:8080/oauth/callback?code=4/0A... redirect URL from their browser.
+func extractOAuthCodeFromInput(s string) (code string, redirectURI string) {
+	s = strings.TrimSpace(s)
+	if strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://") || strings.HasPrefix(s, "localhost:") {
+		rawURL := s
+		if strings.HasPrefix(rawURL, "localhost:") {
+			rawURL = "http://" + rawURL
+		}
+		if u, err := url.Parse(rawURL); err == nil {
+			if c := u.Query().Get("code"); c != "" {
+				base := fmt.Sprintf("%s://%s%s", u.Scheme, u.Host, u.Path)
+				return c, base
+			}
+		}
+	}
+	if strings.Contains(s, "code=") {
+		if idx := strings.Index(s, "code="); idx >= 0 {
+			rest := s[idx+len("code="):]
+			if amp := strings.IndexByte(rest, '&'); amp >= 0 {
+				rest = rest[:amp]
+			}
+			if decoded, err := url.QueryUnescape(rest); err == nil && decoded != "" {
+				return decoded, colabOAuthRedirectURI
+			}
+			return rest, colabOAuthRedirectURI
+		}
+	}
+	return s, colabOAuthRedirectURI
+}
+
+// ExchangeColabCredential exchanges a one-time Google authorization code (4/... or full localhost redirect URL)
 // for a long-lived OAuth2 refresh_token before encrypting and storing it.
 // If the credential already holds a refresh_token (1//...) it is returned as-is.
 func ExchangeColabCredential(ctx context.Context, raw string) (string, error) {
@@ -346,21 +378,22 @@ func ExchangeColabCredential(ctx context.Context, raw string) (string, error) {
 	}
 	tok := colabTokenFromCred(c)
 	if tok == "" {
-		return "", fmt.Errorf("Google Colab credential must include an OAuth code or refresh_token")
+		return "", fmt.Errorf("Google Colab credential must include an OAuth code, redirect URL, or refresh_token")
+	}
+	extractedCode, redirectURI := extractOAuthCodeFromInput(tok)
+	if c.Code != "" {
+		extractedCode, redirectURI = extractOAuthCodeFromInput(c.Code)
 	}
 	// Only exchange one-time authorization codes (typically start with "4/").
-	if !strings.HasPrefix(tok, "4/") && c.Code == "" {
+	if !strings.HasPrefix(extractedCode, "4/") && c.Code == "" {
 		return raw, nil
 	}
-	code := c.Code
-	if code == "" {
-		code = tok
-	}
+	code := extractedCode
 	form := url.Values{
 		"code":          {code},
 		"client_id":     {colabOAuthClientID},
 		"client_secret": {colabOAuthClientSecret},
-		"redirect_uri":  {colabOAuthRedirectURI},
+		"redirect_uri":  {redirectURI},
 		"grant_type":    {"authorization_code"},
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://oauth2.googleapis.com/token", strings.NewReader(form.Encode()))

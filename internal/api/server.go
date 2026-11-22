@@ -191,7 +191,8 @@ func (s *Server) routes() *chi.Mux {
 		})
 	})
 
-	// OpenAPI spec + Swagger UI
+	// OpenAPI spec + Swagger UI + Google Colab OAuth loopback callback
+	r.Get("/oauth/callback", s.handleColabOAuthCallback)
 	r.Get("/docs", s.handleSwaggerUI)
 	r.Get("/openapi.yaml", s.handleOpenAPISpec)
 

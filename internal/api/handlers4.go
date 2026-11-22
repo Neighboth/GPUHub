@@ -54,8 +54,12 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if req.MinVRAMGB < 1 {
-		writeError(w, http.StatusBadRequest, "min_vram_gb is required and must be >= 1 (e.g. 16, 24, 40, 80)")
-		return
+		if strings.EqualFold(req.GPUType, "CPU") || strings.EqualFold(req.GPUType, "TPU") {
+			req.MinVRAMGB = 0
+		} else {
+			writeError(w, http.StatusBadRequest, "min_vram_gb is required and must be >= 1 (e.g. 16, 24, 40, 80)")
+			return
+		}
 	}
 	if req.GPUCount < 1 || req.GPUCount > 8 {
 		writeError(w, http.StatusBadRequest, "gpu_count must be between 1 and 8")

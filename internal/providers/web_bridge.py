@@ -25,7 +25,7 @@ import uuid
 # Official Google Colab CLI OAuth2 client configuration (public desktop client).
 COLAB_CLIENT_ID = "764086051850-6qr4p6gpi6hn506pt8ejuq83di341hur.apps.googleusercontent.com"
 COLAB_CLIENT_SECRET = "d-FL95Q19q7MQmFpd7hHD0Ty"
-COLAB_REDIRECT_URI = "https://sdk.cloud.google.com/applicationdefaultauthcode.html"
+COLAB_REDIRECT_URI = "http://localhost:8080/oauth/callback"
 COLAB_DOMAIN = "https://colab.research.google.com"
 COLAB_STATE_FILE = os.path.join(tempfile.gettempdir(), "gpuhub_colab_sessions.json")
 
@@ -66,6 +66,16 @@ def _colab_exchange_token(req):
     """Return a fresh Google OAuth2 access_token from refresh_token, code, or access_token."""
     tok = (req.get("refresh_token") or req.get("token") or req.get("password") or "").strip()
     code = (req.get("code") or "").strip()
+    redirect_uri = COLAB_REDIRECT_URI
+    for candidate in (code, tok):
+        if "code=" in candidate:
+            parsed = urllib.parse.urlparse(candidate if "://" in candidate else "http://" + candidate)
+            qs = urllib.parse.parse_qs(parsed.query)
+            if qs.get("code"):
+                code = qs["code"][0]
+                if parsed.scheme and parsed.netloc:
+                    redirect_uri = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+                break
     if tok.startswith("ya29."):
         return tok
     if tok.startswith("4/") and not code:
@@ -76,7 +86,7 @@ def _colab_exchange_token(req):
             "code": code,
             "client_id": COLAB_CLIENT_ID,
             "client_secret": COLAB_CLIENT_SECRET,
-            "redirect_uri": COLAB_REDIRECT_URI,
+            "redirect_uri": redirect_uri,
             "grant_type": "authorization_code",
         }).encode("utf-8")
         _, res = _http_json("POST", "https://oauth2.googleapis.com/token",

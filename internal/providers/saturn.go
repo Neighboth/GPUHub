@@ -41,6 +41,7 @@ func (s *saturnAdapter) Capabilities() Capabilities {
 			gpu("A6000", 48, 1),
 			gpu("V100", 32, 1),
 			gpu("A100", 40, 1),
+			gpu("CPU", 0, 1),
 		},
 		MaxDurationHours: 0, // free tier hours cap by account, not by instance
 		Frameworks:       []string{"pytorch", "tensorflow", "jax"},

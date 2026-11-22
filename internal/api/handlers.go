@@ -263,6 +263,22 @@ func (s *Server) handleColabOAuthURL(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"url": providers.ColabOAuthURL()})
 }
 
+func (s *Server) handleColabOAuthCallback(w http.ResponseWriter, r *http.Request) {
+	code := r.URL.Query().Get("code")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	codeJSON, _ := json.Marshal(code)
+	_, _ = fmt.Fprintf(w, `<!doctype html><html><head><meta charset="utf-8"><title>GPUHub - Google Colab OAuth</title>
+<style>body{background:#09090b;color:#e4e4e7;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:95vh;margin:0}
+.box{background:#18181b;border:1px solid #27272a;border-radius:16px;padding:28px;max-width:520px;width:90%%}
+code{display:block;background:#09090b;border:1px solid #27272a;padding:12px;border-radius:8px;color:#34d399;word-break:break-all;margin:14px 0;font-size:13px}</style></head>
+<body><div class="box"><h3 style="margin:0 0 8px;color:#34d399">Google Colab OAuth Kodu Alındı</h3>
+<p style="font-size:13px;color:#a1a1aa;margin:0">Aşağıdaki kodu (veya tarayıcı adres çubuğundaki URL'yi) kopyalayıp GPUHub'daki Google Colab kutusuna yapıştırın:</p>
+<code id="c">%s</code>
+<script>
+try { if (window.opener) { window.opener.postMessage({type:'gpuhub_colab_code', code:%s}, '*'); } } catch(e) {}
+</script></div></body></html>`, code, string(codeJSON))
+}
+
 func (s *Server) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 	providerID := chi.URLParam(r, "id")
 	if providers.Lookup(providerID) == nil {

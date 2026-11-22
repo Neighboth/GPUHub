@@ -5,10 +5,10 @@ import ProviderIcon from '../components/ProviderIcon';
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Label, Select, Input, LoadingBlock } from '../components/ui';
 import { useLang, L } from '../i18n';
 
-// 1B-class GGUF models in Q4 (quantized) - small enough for every free-tier GPU.
+// 1B-class GGUF models - small enough for every free-tier GPU, TPU, or CPU.
 const MODELS = [
   { id: 'qwen2.5-1.5b', name: 'Qwen2.5 1.5B Instruct (Q4_K_M)', repo: 'Qwen/Qwen2.5-1.5B-Instruct-GGUF', file: 'qwen2.5-1.5b-instruct-q4_k_m.gguf', vram: 16 },
-  { id: 'qwen3-0.6b', name: 'Qwen3 0.6B (Q4_K_M)', repo: 'Qwen/Qwen3-0.6B-GGUF', file: 'Qwen3-0.6B-Q4_K_M.gguf', vram: 8 },
+  { id: 'qwen3-0.6b', name: 'Qwen3 0.6B (Q8_0 · 639 MB)', repo: 'Qwen/Qwen3-0.6B-GGUF', file: 'Qwen3-0.6B-Q8_0.gguf', vram: 8 },
   { id: 'tinyllama-1.1b', name: 'TinyLlama 1.1B Chat (Q4_K_M)', repo: 'TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF', file: 'tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf', vram: 8 },
 ] as const;
 
@@ -37,9 +37,20 @@ if CACHE:
     path = CACHE[0]
     print("[gpuhub] model Kaggle Dataset cache'inden: " + path, flush=True)
 else:
-    from huggingface_hub import hf_hub_download
-    print("[gpuhub] cache yok, HF'den indiriliyor: ${m.repo} / ${m.file}", flush=True)
-    path = hf_hub_download("${m.repo}", filename="${m.file}")
+    from huggingface_hub import hf_hub_download, list_repo_files
+    repo_id = "${m.repo}"
+    target_file = "${m.file}"
+    try:
+        print(f"[gpuhub] cache yok, HF'den indiriliyor: {repo_id} / {target_file}", flush=True)
+        path = hf_hub_download(repo_id, filename=target_file)
+    except Exception as e:
+        print(f"[gpuhub] {target_file} bulunamadi ({e}), repo icindeki GGUF dosyalari araniyor...", flush=True)
+        ggufs = [f for f in list_repo_files(repo_id) if f.lower().endswith(".gguf")]
+        if not ggufs:
+            raise RuntimeError(f"{repo_id} icinde hic .gguf dosyasi bulunamadi")
+        preferred = next((f for f in ggufs if "q4_k_m" in f.lower() or "q8_0" in f.lower()), ggufs[0])
+        print(f"[gpuhub] alternatif GGUF indiriliyor: {preferred}", flush=True)
+        path = hf_hub_download(repo_id, filename=preferred)
     print(f"[gpuhub] model hazir ({round(time.time()-t0,1)}s)", flush=True)
 
 from llama_cpp import Llama
@@ -101,7 +112,7 @@ export default function AITest() {
   }, []);
 
   const selectedProvider = providers.find((p) => p.id === provider);
-  const providerGPUs = !Array.isArray(selectedProvider?.capabilities) && selectedProvider?.capabilities?.gpus?.length
+  const rawGPUs = !Array.isArray(selectedProvider?.capabilities) && selectedProvider?.capabilities?.gpus?.length
     ? selectedProvider.capabilities.gpus
     : [
         { type: 'T4', vram_gb: 16 },
@@ -110,7 +121,13 @@ export default function AITest() {
         { type: 'L40S', vram_gb: 48 },
         { type: 'A100', vram_gb: 40 },
         { type: 'H100', vram_gb: 80 },
+        { type: 'TPU', vram_gb: 0 },
+        { type: 'CPU', vram_gb: 0 },
       ];
+  // Always ensure CPU is selectable as an option even if provider capabilities didn't list it.
+  const providerGPUs = rawGPUs.some((g) => g.type === 'CPU')
+    ? rawGPUs
+    : [...rawGPUs, { type: 'CPU', vram_gb: 0 }];
 
   useEffect(() => {
     if (providerGPUs.length > 0 && !providerGPUs.some((g) => g.type === gpu)) {
@@ -132,12 +149,13 @@ export default function AITest() {
     stopRef.current = false;
     const t0 = Date.now();
     try {
+      const fallback = gpu === 'CPU' ? [] : gpu === 'TPU' ? ['CPU'] : gpu === 'T4' ? ['TPU', 'CPU'] : ['CPU'];
       const job = await api.createJob({
         type: 'script',
         payload: buildScript(model, text),
         gpu_type: gpu,
-        gpu_type_fallback: gpu === 'T4' ? ['TPU', 'CPU'] : ['CPU'],
-        min_vram_gb: m.vram,
+        gpu_type_fallback: fallback,
+        min_vram_gb: gpu === 'CPU' || gpu === 'TPU' ? 1 : m.vram,
         gpu_count: 1,
         max_duration_seconds: 1800,
         provider_preference: [provider],
@@ -203,11 +221,15 @@ export default function AITest() {
               </Select>
             </div>
             <div>
-              <Label htmlFor="ai-gpu">{L(lang, { en: 'GPU', tr: 'GPU' })}</Label>
+              <Label htmlFor="ai-gpu">{L(lang, { en: 'Accelerator (GPU / TPU / CPU)', tr: 'Donanım (GPU / TPU / CPU)' })}</Label>
               <Select id="ai-gpu" value={gpu} onChange={(e) => setGpu(e.target.value)}>
                 {providerGPUs.map((g) => (
                   <option key={g.type} value={g.type}>
-                    {g.type}{g.vram_gb ? ` (${g.vram_gb} GB)` : ''}
+                    {g.type === 'CPU'
+                      ? L(lang, { en: 'CPU (No GPU / CPU-only)', tr: 'CPU (GPU’suz / Sadece İşlemci)' })
+                      : g.type === 'TPU'
+                        ? 'TPU (Tensor Processing Unit)'
+                        : `${g.type}${g.vram_gb ? ` (${g.vram_gb} GB VRAM)` : ''}`}
                   </option>
                 ))}
               </Select>
