@@ -100,6 +100,9 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 	jobID, _ := res.LastInsertId()
 	audit.Log(r.Context(), s.db, userFrom(r.Context()).Username, "job_create",
 		fmt.Sprintf("job_id=%d type=%s gpu=%s min_vram_gb=%d gpu_count=%d", jobID, req.Type, req.GPUType, req.MinVRAMGB, req.GPUCount))
+	if s.onJobCreated != nil {
+		s.onJobCreated()
+	}
 	writeJSON(w, http.StatusCreated, map[string]any{"id": jobID, "status": "queued"})
 }
 

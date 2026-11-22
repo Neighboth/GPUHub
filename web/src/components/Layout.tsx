@@ -160,7 +160,7 @@ export default function Layout() {
   );
 
   return (
-    <div className="flex h-screen overflow-hidden bg-zinc-950">
+    <div className="app-backdrop flex h-screen overflow-hidden bg-zinc-950">
       {/* Desktop sidebar */}
       <div className="hidden shrink-0 lg:block">{sidebar}</div>
 
@@ -198,6 +198,10 @@ export default function Layout() {
           </div>
 
           <div className="ml-auto flex items-center gap-2">
+            <span className="hidden items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-400 sm:inline-flex">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+              {L(lang, { en: 'Online', tr: 'Çevrimiçi' })}
+            </span>
             {/* Language switcher */}
             <div className="relative" ref={langRef}>
               <button

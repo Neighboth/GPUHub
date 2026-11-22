@@ -83,7 +83,6 @@ def run_command(job_id: str, spec: dict):
 @app.function(
     image=image,
     gpu=os.environ.get("GPUHUB_MODAL_GPU", "T4"),
-    secrets=[modal.Secret.from_name("gpuhub-runner-token", required_keys=["GPUHUB_RUNNER_TOKEN"])],
 )
 @modal.concurrent(max_inputs=5)
 @modal.asgi_app()

@@ -259,6 +259,10 @@ type createKeyReq struct {
 	Weight       int    `json:"weight"`
 }
 
+func (s *Server) handleColabOAuthURL(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"url": providers.ColabOAuthURL()})
+}
+
 func (s *Server) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 	providerID := chi.URLParam(r, "id")
 	if providers.Lookup(providerID) == nil {
@@ -273,6 +277,14 @@ func (s *Server) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(req.Credential) == "" {
 		writeError(w, http.StatusBadRequest, "credential is required")
 		return
+	}
+	if providerID == "colab" {
+		exchanged, err := providers.ExchangeColabCredential(r.Context(), req.Credential)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		req.Credential = exchanged
 	}
 	// Bound proxy is OPTIONAL - keys without a proxy use direct egress (no sticky binding).
 	if req.BoundProxyID < 0 {

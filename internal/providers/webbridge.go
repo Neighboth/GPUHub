@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -50,9 +51,10 @@ func NewColabBridge() *webbridgeAdapter {
 	return &webbridgeAdapter{
 		id: "colab", name: "Google Colab", host: "https://colab.research.google.com",
 		caps: Capabilities{
-			GPUs: []GPU{gpu("T4", 16, 1)}, MaxDurationHours: 12,
-			Frameworks: []string{"pytorch", "tensorflow", "jax"}, Notebooks: true, Docker: false, SSH: false,
-			FreeTierNotes: "Recurring free T4 GPU; submit via official google-colab-cli (OAuth) / hidden Colab HTTP API, Playwright fallback. Requires WSL on Windows.",
+			GPUs: []GPU{gpu("T4", 16, 1), gpu("L4", 24, 1), gpu("A100", 40, 1), gpu("H100", 80, 1), gpu("TPU", 0, 1), gpu("CPU", 0, 2)},
+			MaxDurationHours: 12,
+			Frameworks:       []string{"pytorch", "tensorflow", "jax"}, Notebooks: true, Docker: false, SSH: false,
+			FreeTierNotes: "Recurring free T4 GPU (plus Pro L4/A100/H100); authenticated via Google OAuth2 token (not app password).",
 		},
 	}
 }
@@ -61,28 +63,41 @@ func NewModalBridge() *webbridgeAdapter {
 	return &webbridgeAdapter{
 		id: "modal", name: "Modal", host: "https://modal.com", modal: true,
 		caps: Capabilities{
-			GPUs: []GPU{gpu("T4", 16, 8), gpu("L4", 24, 8), gpu("A10", 24, 8), gpu("L40S", 48, 8), gpu("A100", 40, 8), gpu("H100", 80, 8)},
+			GPUs: []GPU{gpu("T4", 16, 8), gpu("L4", 24, 8), gpu("A10", 24, 8), gpu("A10G", 24, 8), gpu("L40S", 48, 8), gpu("A100", 40, 8), gpu("H100", 80, 8), gpu("CPU", 0, 8)},
 			MaxDurationHours: 24, Frameworks: []string{"pytorch", "tensorflow", "jax"},
 			Notebooks: false, Docker: true, SSH: false,
-			FreeTierNotes: "$30/month recurring compute credit. No REST control plane: submits via Modal SDK (gRPC ak-/as-) through examples/modal_runner.py; Playwright fallback for dashboard-only flows.",
+			FreeTierNotes: "$30/month recurring compute credit. Submits directly via Modal Sandbox gRPC SDK (ak-/as-).",
 		},
 	}
 }
 
 type webCred struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-	TokenID  string `json:"id"`
-	Secret   string `json:"secret"`
+	Username     string `json:"username"`
+	Password     string `json:"password"`
+	TokenID      string `json:"id"`
+	Secret       string `json:"secret"`
+	Token        string `json:"token"`
+	RefreshToken string `json:"refresh_token"`
+	Code         string `json:"code"`
 }
 
 func parseWebCred(raw string) (webCred, error) {
 	var c webCred
-	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &c); err != nil {
-		// opaque string -> password (legacy single-token keys)
-		return webCred{Password: strings.TrimSpace(raw)}, nil
+	s := strings.TrimSpace(raw)
+	if err := json.Unmarshal([]byte(s), &c); err != nil {
+		// opaque string -> token
+		return webCred{Token: s}, nil
 	}
 	return c, nil
+}
+
+func colabTokenFromCred(c webCred) string {
+	for _, v := range []string{c.RefreshToken, c.Token, c.Code, c.Password} {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
 }
 
 // callBridge invokes the Python helper. The helper tries hidden APIs first, then
@@ -94,16 +109,17 @@ func (w *webbridgeAdapter) callBridge(ctx context.Context, cred Credential, acti
 	}
 	if w.modal {
 		if c.TokenID == "" || c.Secret == "" {
-			return nil, fmt.Errorf("Modal credential must be {\"id\":\"ak-...\",\"secret\":\"as-...\"} (from `modal token new`), or username/password for web fallback")
+			return nil, fmt.Errorf("Modal credential must be {\"id\":\"ak-...\",\"secret\":\"as-...\"} (from `modal token new`)")
 		}
-	} else if c.Username == "" || c.Password == "" {
-		return nil, fmt.Errorf("%s credential must be {\"username\":\"...\",\"password\":\"...\"}", w.name)
+	} else if colabTokenFromCred(c) == "" {
+		return nil, fmt.Errorf("%s credential must include a Google OAuth refresh_token (1//...) or authorization code (4/...)", w.name)
 	}
 
 	req := map[string]any{
 		"provider": w.id, "action": action,
 		"host": w.host, "username": c.Username, "password": c.Password,
 		"token_id": c.TokenID, "secret": c.Secret,
+		"token": colabTokenFromCred(c), "refresh_token": c.RefreshToken, "code": c.Code,
 	}
 	for k, v := range extra {
 		req[k] = v
@@ -180,17 +196,17 @@ func nativeBridgeResult(w *webbridgeAdapter, c webCred, action string, extra map
 			if !strings.HasPrefix(c.TokenID, "ak-") || !strings.HasPrefix(c.Secret, "as-") {
 				return nil, fmt.Errorf("Modal credential must be {\"id\":\"ak-...\",\"secret\":\"as-...\"} (from `modal token new`)")
 			}
-		} else if c.Username == "" || c.Password == "" {
-			return nil, fmt.Errorf("%s credential must be {\"username\":\"...\",\"password\":\"...\"}", w.name)
+		} else if colabTokenFromCred(c) == "" {
+			return nil, fmt.Errorf("%s credential must include a Google OAuth token (1//... or 4/...)", w.name)
 		}
 		return map[string]any{"ok": true, "native": true}, nil
 	case "quota":
 		if w.modal {
 			return map[string]any{"raw": "$30/month recurring compute credit (Modal Starter); no REST balance endpoint"}, nil
 		}
-		return map[string]any{"raw": "Google Colab free T4 - dynamic weekly allowance; no fixed quota API"}, nil
+		return map[string]any{"raw": "Google Colab free T4 - dynamic weekly allowance; OAuth2 connected"}, nil
 	case "submit", "status", "logs", "cancel":
-		return nil, fmt.Errorf("%s %s needs a Python runtime (`python3` + `modal`/`playwright`): install python3 in the GPUHub image (Dockerfile updated)", w.name, action)
+		return nil, fmt.Errorf("%s %s needs a Python runtime (`python3` + `modal`): install python3 in the GPUHub image", w.name, action)
 	}
 	return nil, fmt.Errorf("unknown bridge action %q", action)
 }
@@ -200,10 +216,7 @@ func (w *webbridgeAdapter) Name() string          { return w.name }
 func (w *webbridgeAdapter) Capabilities() Capabilities { return w.caps }
 
 // ValidateKey performs a REAL validation: it calls the Python bridge (Modal SDK
-// / hidden Colab API / Playwright login) when a Python runtime is available.
-// Previously this was shape-only and returned "OK" instantly even when the
-// credentials were dead or the SDK was missing - misleading. When Python is
-// absent we report that validation cannot run, instead of faking OK.
+// or Colab OAuth2 /tun/m/ccu-info) when a Python runtime is available.
 func (w *webbridgeAdapter) ValidateKey(ctx context.Context, cred Credential, proxyURL string) error {
 	// Fast-fail on obviously malformed credentials before spawning Python.
 	c, err := parseWebCred(cred.Raw)
@@ -217,13 +230,12 @@ func (w *webbridgeAdapter) ValidateKey(ctx context.Context, cred Credential, pro
 		if !strings.HasPrefix(c.Secret, "as-") || len(c.Secret) < 12 {
 			return fmt.Errorf("Modal credential secret must start with 'as-' (from `modal token new`)")
 		}
-	} else if c.Username == "" || c.Password == "" {
-		return fmt.Errorf("%s credential must be {\"username\":\"...\",\"password\":\"...\"} - both boxes required", w.name)
+	} else if colabTokenFromCred(c) == "" {
+		return fmt.Errorf("%s credential must include a Google OAuth refresh_token (1//...) or authorization code (4/...)", w.name)
 	}
 
 	// Real end-to-end validation through the bridge.
-	if py, err := exec.LookPath("python"); err == nil {
-		_ = py
+	if _, err := exec.LookPath("python"); err == nil {
 		_, err = w.callBridge(ctx, cred, "validate", nil)
 		return err
 	}
@@ -231,7 +243,7 @@ func (w *webbridgeAdapter) ValidateKey(ctx context.Context, cred Credential, pro
 		_, err = w.callBridge(ctx, cred, "validate", nil)
 		return err
 	}
-	return fmt.Errorf("cannot validate %s: python3 not installed in GPUHub image (install python3 + modal/playwright); format is valid but NOT verified", w.name)
+	return fmt.Errorf("cannot validate %s: python3 not installed in GPUHub image", w.name)
 }
 
 func (w *webbridgeAdapter) ListGPUs(ctx context.Context, cred Credential, _ string) ([]GPU, error) {
@@ -239,6 +251,11 @@ func (w *webbridgeAdapter) ListGPUs(ctx context.Context, cred Credential, _ stri
 }
 
 func (w *webbridgeAdapter) Quota(ctx context.Context, cred Credential, _ string) (Quota, error) {
+	if !w.modal {
+		if r, err := w.callBridge(ctx, cred, "quota", nil); err == nil {
+			return Quota{Raw: fmt.Sprint(r["raw"]), Percent: floatVal(r["percent"])}, nil
+		}
+	}
 	c, _ := parseWebCred(cred.Raw)
 	r, err := nativeBridgeResult(w, c, "quota", nil)
 	if err != nil {
@@ -249,7 +266,10 @@ func (w *webbridgeAdapter) Quota(ctx context.Context, cred Credential, _ string)
 
 func (w *webbridgeAdapter) Submit(ctx context.Context, cred Credential, _ string, job JobSpec) (RemoteJobID, error) {
 	r, err := w.callBridge(ctx, cred, "submit", map[string]any{
-		"payload": job.Payload, "gpu_type": job.GPUType, "type": string(job.Type),
+		"payload":              job.Payload,
+		"gpu_type":             job.GPUType,
+		"type":                 string(job.Type),
+		"max_duration_seconds": int(job.MaxDuration.Seconds()),
 	})
 	if err != nil {
 		return "", err
@@ -296,8 +316,80 @@ func floatVal(v any) float64 {
 	return 0
 }
 
-// keep net/http imported for future direct-API probes in this file.
-var _ = http.MethodGet
+const (
+	colabOAuthClientID     = "764086051850-6qr4p6gpi6hn506pt8ejuq83di341hur.apps.googleusercontent.com"
+	colabOAuthClientSecret = "d-FL95Q19q7MQmFpd7hHD0Ty"
+	colabOAuthRedirectURI  = "https://sdk.cloud.google.com/applicationdefaultauthcode.html"
+)
+
+// ColabOAuthURL returns Google's official OAuth2 consent URL used by google-colab-cli.
+func ColabOAuthURL() string {
+	v := url.Values{
+		"client_id":     {colabOAuthClientID},
+		"redirect_uri":  {colabOAuthRedirectURI},
+		"response_type": {"code"},
+		"scope":         {"openid https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/colaboratory https://www.googleapis.com/auth/drive.file"},
+		"access_type":   {"offline"},
+		"prompt":        {"consent"},
+		"token_usage":   {"remote"},
+	}
+	return "https://accounts.google.com/o/oauth2/auth?" + v.Encode()
+}
+
+// ExchangeColabCredential exchanges a one-time Google authorization code (4/...)
+// for a long-lived OAuth2 refresh_token before encrypting and storing it.
+// If the credential already holds a refresh_token (1//...) it is returned as-is.
+func ExchangeColabCredential(ctx context.Context, raw string) (string, error) {
+	c, err := parseWebCred(raw)
+	if err != nil {
+		return raw, err
+	}
+	tok := colabTokenFromCred(c)
+	if tok == "" {
+		return "", fmt.Errorf("Google Colab credential must include an OAuth code or refresh_token")
+	}
+	// Only exchange one-time authorization codes (typically start with "4/").
+	if !strings.HasPrefix(tok, "4/") && c.Code == "" {
+		return raw, nil
+	}
+	code := c.Code
+	if code == "" {
+		code = tok
+	}
+	form := url.Values{
+		"code":          {code},
+		"client_id":     {colabOAuthClientID},
+		"client_secret": {colabOAuthClientSecret},
+		"redirect_uri":  {colabOAuthRedirectURI},
+		"grant_type":    {"authorization_code"},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://oauth2.googleapis.com/token", strings.NewReader(form.Encode()))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("OAuth code exchange failed: %w", err)
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	var res struct {
+		RefreshToken string `json:"refresh_token"`
+		AccessToken  string `json:"access_token"`
+		Error        string `json:"error"`
+		ErrorDesc    string `json:"error_description"`
+	}
+	_ = json.Unmarshal(b, &res)
+	if resp.StatusCode >= 400 || res.Error != "" {
+		return "", fmt.Errorf("Google OAuth error: %s %s", res.Error, res.ErrorDesc)
+	}
+	if res.RefreshToken == "" {
+		return "", fmt.Errorf("Google OAuth did not return a refresh_token (make sure to approve offline access)")
+	}
+	out, _ := json.Marshal(map[string]string{"token": res.RefreshToken})
+	return string(out), nil
+}
 
 func init() {
 	registerBuiltin(func() []Provider { return []Provider{NewColabBridge(), NewModalBridge()} })

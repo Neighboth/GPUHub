@@ -188,20 +188,43 @@ func (s *saturnAdapter) Submit(ctx context.Context, cred Credential, _ string, j
 	if err != nil {
 		return "", err
 	}
+	var jobID string
 	var probe struct {
 		ID string `json:"id"`
 	}
 	if err := json.Unmarshal(b, &probe); err == nil && probe.ID != "" {
-		return RemoteJobID(probe.ID), nil
+		jobID = probe.ID
+	} else {
+		var nested struct {
+			Job struct {
+				ID string `json:"id"`
+			} `json:"job"`
+		}
+		if err := json.Unmarshal(b, &nested); err == nil && nested.Job.ID != "" {
+			jobID = nested.Job.ID
+		}
 	}
-	// Some firmware returns {id: ...} nested
-	var nested struct {
-		Job struct{ ID string `json:"id"` } `json:"job"`
+	if jobID == "" {
+		return "", fmt.Errorf("saturn job create returned unmappable body: %s", truncate(string(b), 200))
 	}
-	if err := json.Unmarshal(b, &nested); err == nil && nested.Job.ID != "" {
-		return RemoteJobID(nested.Job.ID), nil
+
+	// Saturn POST /api/jobs only creates a stopped job definition; /start actually schedules the pod.
+	if _, startErr := s.do(ctx, cred, http.MethodPost, "/api/jobs/"+jobID+"/start", json.RawMessage(`{}`)); startErr != nil {
+		// Clean up the orphan stopped job definition so we don't litter the account.
+		_, _ = s.do(ctx, cred, http.MethodDelete, "/api/jobs/"+jobID, nil)
+		if he, ok := startErr.(*HTTPError); ok {
+			low := strings.ToLower(he.Body)
+			if strings.Contains(low, "upgrade_to_pro") || strings.Contains(low, "exceeded the limits") || strings.Contains(low, "0 hours") {
+				return "", &HTTPError{
+					Status: 429,
+					Body:   he.Body,
+					Err:    fmt.Errorf("%w: Saturn Cloud ücretsiz saat kotası dolmuş (0 saat limit / UPGRADE_TO_PRO)", ErrQuota),
+				}
+			}
+		}
+		return "", fmt.Errorf("saturn job start failed: %w", startErr)
 	}
-	return "", fmt.Errorf("saturn job create returned unmappable body: %s", truncate(string(b), 200))
+	return RemoteJobID(jobID), nil
 }
 
 func shellQuote(s string) string {

@@ -184,14 +184,32 @@ export interface DashboardSummary {
   recent_errors: { ts: string; message: string }[];
 }
 
+export interface ProviderGPU {
+  type: string;
+  vram_gb?: number;
+  count?: number;
+  max_count?: number;
+}
+
+export interface ProviderCapabilitiesObj {
+  gpus?: ProviderGPU[];
+  max_duration_hours?: number;
+  frameworks?: string[];
+  notebooks?: boolean;
+  docker?: boolean;
+  ssh?: boolean;
+  free_tier_notes?: string;
+}
+
 export interface Provider {
   id: string;
   name: string;
   description?: string;
   gpu_types?: string[];
-  capabilities?: string[];
+  capabilities?: string[] | ProviderCapabilitiesObj;
   key_count?: number;
   keys_count?: number;
+  active_keys?: number;
   enabled?: boolean;
   default_enabled?: boolean;
 }
@@ -384,6 +402,10 @@ async function dashboardSummary(): Promise<DashboardSummary> {
 
 async function providers(): Promise<Provider[]> {
   return unwrapList<Provider>(await request('/providers'), ['providers', 'items', 'data']);
+}
+
+async function colabOAuthURL(): Promise<{ url: string }> {
+  return request<{ url: string }>('/providers/colab/oauth-url');
 }
 
 async function updateProvider(id: string, enabled: boolean): Promise<unknown> {
@@ -671,6 +693,7 @@ export const api = {
   logout,
   dashboardSummary,
   providers,
+  colabOAuthURL,
   updateProvider,
   addProviderKey,
   revealKey,

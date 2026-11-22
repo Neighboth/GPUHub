@@ -85,6 +85,7 @@ func main() {
 
 	// Background workers: scheduler + poller + proxy health checks (60s).
 	scheduler := jobs.New(conn, cfg, box, notifyFunc)
+	apiServer.SetOnJobCreated(scheduler.Trigger)
 	scheduler.Start(ctx)
 	go proxyMgr.HealthLoop(ctx, cfg.ProxyHealthInterval, cfg.ProxyHealthURL, cfg.ProxyHealthTimeout, notifyFunc)
 

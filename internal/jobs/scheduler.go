@@ -23,6 +23,7 @@ type Scheduler struct {
 	Cfg    *config.Config
 	Box    *crypto.Box
 	Notify func(level, msg string) // may be nil
+	wakeCh chan struct{}
 }
 
 // Job mirrors the jobs table for scheduling purposes.
@@ -59,7 +60,18 @@ type candidate struct {
 }
 
 func New(db *sql.DB, cfg *config.Config, box *crypto.Box, notify func(level, msg string)) *Scheduler {
-	return &Scheduler{DB: db, Cfg: cfg, Box: box, Notify: notify}
+	return &Scheduler{DB: db, Cfg: cfg, Box: box, Notify: notify, wakeCh: make(chan struct{}, 1)}
+}
+
+// Trigger wakes the scheduler loop immediately (non-blocking) when a new job is created.
+func (s *Scheduler) Trigger() {
+	if s.wakeCh == nil {
+		return
+	}
+	select {
+	case s.wakeCh <- struct{}{}:
+	default:
+	}
 }
 
 func (s *Scheduler) log(level, msg string) {
@@ -71,7 +83,20 @@ func (s *Scheduler) log(level, msg string) {
 }
 
 func (s *Scheduler) Start(ctx context.Context) {
-	go s.loop(ctx, s.Cfg.SchedulerInterval, func() { s.schedulePending(ctx) })
+	go func() {
+		t := time.NewTicker(s.Cfg.SchedulerInterval)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-s.wakeCh:
+				s.schedulePending(ctx)
+			case <-t.C:
+				s.schedulePending(ctx)
+			}
+		}
+	}()
 	go s.loop(ctx, s.Cfg.PollInterval, func() { s.pollRunning(ctx) })
 }
 

@@ -307,7 +307,11 @@ func (k *kaggleAdapter) Status(ctx context.Context, cred Credential, _ string, i
 	if state == "" {
 		state = "unknown"
 	}
-	return JobStatus{State: state, Message: probe.FailureMessage, Raw: probe.Status}, nil
+	msg := probe.FailureMessage
+	if msg == "" {
+		msg = "Kaggle kernel durumu: " + strings.ToUpper(probe.Status)
+	}
+	return JobStatus{State: state, Message: msg, Raw: probe.Status}, nil
 }
 
 func bOf(v any) []byte { b, _ := json.Marshal(v); return b }
@@ -342,7 +346,10 @@ func (k *kaggleAdapter) Logs(ctx context.Context, cred Credential, _ string, id 
 		for _, ev := range events {
 			sb.WriteString(ev.Data)
 		}
-		return strings.NewReader(sb.String()), nil
+		if sb.Len() == 0 {
+		return strings.NewReader("[Kaggle VM hazırlanıyor/çalışıyor — Kaggle script kernel logları çıktı ürettikçe veya tamamlanınca görünür]"), nil
+	}
+	return strings.NewReader(sb.String()), nil
 	}
 	// Fallback: tolerate stray non-array framing.
 	for _, line := range strings.Split(probe.Log, "\n") {
@@ -363,6 +370,9 @@ func (k *kaggleAdapter) Logs(ctx context.Context, cred Credential, _ string, id 
 		}
 		sb.WriteString(line)
 		sb.WriteByte('\n')
+	}
+	if sb.Len() == 0 {
+		return strings.NewReader("[Kaggle VM hazırlanıyor/çalışıyor — Kaggle script kernel logları çıktı ürettikçe veya tamamlanınca görünür]"), nil
 	}
 	return strings.NewReader(sb.String()), nil
 }

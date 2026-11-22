@@ -6,8 +6,7 @@ import {
   Gauge,
   Plus,
   RefreshCw,
-  Layers,
-  Globe2,
+  ExternalLink,
   Info,
 } from 'lucide-react';
 import {
@@ -55,8 +54,12 @@ function credentialFieldsFor(providerId: string): CredField[] {
       ];
     case 'colab':
       return [
-        { key: 'username', label: { en: 'Google e-mail', tr: 'Google e-posta' }, placeholder: 'you@gmail.com' },
-        { key: 'password', label: { en: 'Google app password', tr: 'Google uygulama şifresi' }, placeholder: '••••••••', secret: true },
+        {
+          key: 'token',
+          label: { en: 'Google OAuth2 code (4/…) or refresh token (1//…)', tr: 'Google OAuth2 yetki kodu (4/…) veya refresh token (1//…)' },
+          placeholder: '4/0A… veya 1//0…',
+          secret: true,
+        },
       ];
     case 'modal':
       return [
@@ -163,6 +166,7 @@ export default function Providers() {
   const [testError, setTestError] = useState('');
 
   const [toggleBusy, setToggleBusy] = useState<string | null>(null);
+  const [colabOAuthUrl, setColabOAuthUrl] = useState<string>('');
 
   const load = useCallback((spin = true) => {
     if (spin) setLoading(true);
@@ -222,6 +226,34 @@ export default function Providers() {
     setWeeklyQuota('');
     setPriority('100');
     setFormError('');
+    if (p.id === 'colab') {
+      api.colabOAuthURL().then((r) => setColabOAuthUrl(r.url)).catch(() => {});
+    }
+  }
+
+  function handleCredInput(fieldKey: string, val: string) {
+    const trimmed = val.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}') && keyModalFor) {
+      try {
+        const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+        const fields = credentialFieldsFor(keyModalFor.id);
+        const next: Record<string, string> = { ...credValues };
+        let matched = false;
+        for (const f of fields) {
+          if (parsed[f.key] != null) {
+            next[f.key] = String(parsed[f.key]);
+            matched = true;
+          }
+        }
+        if (matched) {
+          setCredValues(next);
+          return;
+        }
+      } catch {
+        /* not valid JSON yet, treat as normal text */
+      }
+    }
+    setCredValues((prev) => ({ ...prev, [fieldKey]: val }));
   }
 
   function openQuota(p: Provider) {
@@ -337,12 +369,23 @@ export default function Providers() {
                     </div>
                   </div>
 
-                  {/* Key count */}
-                  <div className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-2">
-                    <span className="flex items-center gap-2 text-xs text-zinc-400">
-                      <KeyRound size={13} className="text-zinc-500" /> {L(lang, { en: 'API keys', tr: 'API anahtarları' })}
-                    </span>
-                    <span className="text-sm font-bold tabular-nums text-zinc-100">{keyCount}</span>
+                  {/* Key count & notes */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-2">
+                      <span className="flex items-center gap-2 text-xs text-zinc-400">
+                        <KeyRound size={13} className="text-zinc-500" /> {L(lang, { en: 'API keys', tr: 'API anahtarları' })}
+                      </span>
+                      <span className="text-sm font-bold tabular-nums text-zinc-100">
+                        {p.active_keys != null ? (
+                          <span>{p.active_keys} <span className="text-xs font-normal text-zinc-500">/ {keyCount}</span></span>
+                        ) : keyCount}
+                      </span>
+                    </div>
+                    {!Array.isArray(p.capabilities) && p.capabilities?.free_tier_notes && (
+                      <p className="line-clamp-2 text-[11px] leading-relaxed text-zinc-500" title={p.capabilities.free_tier_notes}>
+                        {p.capabilities.free_tier_notes}
+                      </p>
+                    )}
                   </div>
 
                   {/* Actions */}
@@ -388,6 +431,30 @@ export default function Providers() {
           </div>
           <div className="space-y-3">
             <p className="text-xs font-medium text-zinc-300">{L(lang, { en: 'Credential fields', tr: 'Credential alanları' })}</p>
+            {keyModalFor?.id === 'colab' && (
+              <div className="space-y-2.5 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.06] p-3.5">
+                <div className="text-xs font-semibold text-emerald-300">
+                  {L(lang, { en: 'Google Colab OAuth2 (No App Password Needed)', tr: 'Google Colab OAuth2 (Uygulama Şifresi Gerekmez)' })}
+                </div>
+                <p className="text-[11px] leading-relaxed text-zinc-400">
+                  {L(lang, {
+                    en: 'Google App Passwords cannot start/stop Colab runtimes. Click below to sign in with Google, copy the authorization code shown on the page, and paste it into the box below. GPUHub automatically converts it into a permanent refresh token.',
+                    tr: 'Google uygulama şifresi ile Colab sunucusu açılıp kapatılamaz. Aşağıdaki butona tıklayıp Google ile giriş yapın, ekranda çıkan yetki kodunu (4/...) kopyalayıp alttaki kutuya yapıştırın. GPUHub bunu otomatik olarak kalıcı OAuth tokena çevirir.',
+                  })}
+                </p>
+                {colabOAuthUrl && (
+                  <a
+                    href={colabOAuthUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/25"
+                  >
+                    <ExternalLink size={13} />
+                    {L(lang, { en: '1. Get Google OAuth Code (New Tab)', tr: '1. Google OAuth Yetki Kodu Al (Yeni Sekme)' })}
+                  </a>
+                )}
+              </div>
+            )}
             {keyModalFor && credentialFieldsFor(keyModalFor.id).map((f) => (
               <div key={f.key}>
                 <Label htmlFor={`key-cred-${f.key}`}>{L(lang, f.label)}</Label>
@@ -396,13 +463,13 @@ export default function Providers() {
                   type={f.secret ? 'password' : 'text'}
                   autoComplete="off"
                   value={credValues[f.key] ?? ''}
-                  onChange={(e) => setCredValues((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                  onChange={(e) => handleCredInput(f.key, e.target.value)}
                   placeholder={f.placeholder}
                   disabled={submitting}
                 />
               </div>
             ))}
-            <p className="mt-1.5 flex items-start gap-1.5 text-[11px] text-zinc-500"><Info size={12} className="mt-0.5 shrink-0" />{L(lang, { en: 'Each box holds one value. GPUHub assembles them into the credential format automatically - no JSON needed.', tr: 'Her kutuya tek bir bilgi girin. GPUHub bunları otomatik olarak credential formatına çevirir - JSON gerekmez.' })}</p>
+            <p className="mt-1.5 flex items-start gap-1.5 text-[11px] text-zinc-500"><Info size={12} className="mt-0.5 shrink-0" />{L(lang, { en: 'Tip: You can also paste raw JSON directly into any box (e.g. {"id":"ak-...","secret":"as-..."}) to auto-fill all fields.', tr: 'İpucu: Herhangi bir kutuya doğrudan JSON yapıştırabilirsiniz (örn. {"id":"ak-...","secret":"as-..."}); alanlar otomatik doldurulur.' })}</p>
           </div>
           <div>
             <Label htmlFor="key-proxy">

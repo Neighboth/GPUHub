@@ -35,7 +35,11 @@ type Server struct {
 
 	loginRL *rateLimiter
 	apiRL   *rateLimiter
+
+	onJobCreated func()
 }
+
+func (s *Server) SetOnJobCreated(fn func()) { s.onJobCreated = fn }
 
 func NewServer(cfg *config.Config, db *sql.DB, box *crypto.Box, authSvc *auth.Service, proxyMgr *proxy.Manager, static fs.FS) *Server {
 	s := &Server{
@@ -149,6 +153,7 @@ func (s *Server) routes() *chi.Mux {
 			r.Get("/gpu-types", s.handleGPUTypes)
 
 			r.Get("/providers", s.handleListProviders)
+			r.Get("/providers/colab/oauth-url", s.handleColabOAuthURL)
 			r.Patch("/providers/{id}", s.handleUpdateProvider)
 			r.Post("/providers/{id}/keys", s.handleCreateKey)
 			r.Post("/providers/{id}/test", s.handleTestProvider)

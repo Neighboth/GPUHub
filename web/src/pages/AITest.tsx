@@ -21,18 +21,23 @@ function buildScript(modelId: ModelId, userMessage: string): string {
   // Kaggle kernels AND self-hosted runners execute the payload as PYTHON code,
   // so the payload must be pure Python - never a bash script with pip install.
   return `import subprocess, sys, json, time, os, glob
+t0 = time.time()
 # Cold-start fix: prefer a persistent Kaggle Dataset mounted at /kaggle/input.
 # One-time setup: upload ${m.file} as a private Kaggle Dataset named "gpuhub-models"
 # (GPUHub looks in /kaggle/input/*gpuhub*/**/${m.file}). This makes starts ~5s
 # instead of re-downloading ~1 GB from HuggingFace every run.
 CACHE = glob.glob("/kaggle/input/**/${m.file}", recursive=True)
+print("[gpuhub] paketler hazirlaniyor...", flush=True)
+subprocess.check_call([
+    sys.executable, "-m", "pip", "install", "-q", "--prefer-binary",
+    "--extra-index-url", "https://abetlen.github.io/llama-cpp-python/whl/cpu",
+    "llama-cpp-python", "huggingface_hub",
+])
 if CACHE:
     path = CACHE[0]
     print("[gpuhub] model Kaggle Dataset cache'inden: " + path, flush=True)
 else:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "llama-cpp-python", "huggingface_hub"])
     from huggingface_hub import hf_hub_download
-    t0 = time.time()
     print("[gpuhub] cache yok, HF'den indiriliyor: ${m.repo} / ${m.file}", flush=True)
     path = hf_hub_download("${m.repo}", filename="${m.file}")
     print(f"[gpuhub] model hazir ({round(time.time()-t0,1)}s)", flush=True)
@@ -89,10 +94,29 @@ export default function AITest() {
   useEffect(() => {
     api.providers().then((ps) => {
       setProviders(ps);
-      const usable = ps.find((p) => p.id === 'kaggle' && providerKeyCount(p) > 0);
-      if (usable) setProvider('kaggle');
+      const withKeys = ps.filter((p) => providerKeyCount(p) > 0);
+      const usable = withKeys.find((p) => p.id === 'kaggle') ?? withKeys[0];
+      if (usable) setProvider(usable.id);
     }).catch(() => {});
   }, []);
+
+  const selectedProvider = providers.find((p) => p.id === provider);
+  const providerGPUs = !Array.isArray(selectedProvider?.capabilities) && selectedProvider?.capabilities?.gpus?.length
+    ? selectedProvider.capabilities.gpus
+    : [
+        { type: 'T4', vram_gb: 16 },
+        { type: 'A10', vram_gb: 24 },
+        { type: 'L4', vram_gb: 24 },
+        { type: 'L40S', vram_gb: 48 },
+        { type: 'A100', vram_gb: 40 },
+        { type: 'H100', vram_gb: 80 },
+      ];
+
+  useEffect(() => {
+    if (providerGPUs.length > 0 && !providerGPUs.some((g) => g.type === gpu)) {
+      setGpu(providerGPUs[0].type);
+    }
+  }, [provider, providerGPUs, gpu]);
 
   const m = MODELS.find((x) => x.id === model)!;
 
@@ -123,7 +147,7 @@ export default function AITest() {
       const deadline = Date.now() + 20 * 60 * 1000;
       let last: Job = job;
       while (Date.now() < deadline && !stopRef.current) {
-        await new Promise((r) => setTimeout(r, 5000));
+        await new Promise((r) => setTimeout(r, 2500));
         last = await api.job(String(job.id));
         const st = String(last.status ?? '').toLowerCase();
         const secs = Math.round((Date.now() - t0) / 1000);
@@ -181,12 +205,11 @@ export default function AITest() {
             <div>
               <Label htmlFor="ai-gpu">{L(lang, { en: 'GPU', tr: 'GPU' })}</Label>
               <Select id="ai-gpu" value={gpu} onChange={(e) => setGpu(e.target.value)}>
-                <option value="T4">T4 (16 GB)</option>
-                <option value="A10">A10 (24 GB)</option>
-                <option value="L4">L4 (24 GB)</option>
-                <option value="L40S">L40S (48 GB)</option>
-                <option value="A100">A100 (40 GB)</option>
-                <option value="H100">H100 (80 GB)</option>
+                {providerGPUs.map((g) => (
+                  <option key={g.type} value={g.type}>
+                    {g.type}{g.vram_gb ? ` (${g.vram_gb} GB)` : ''}
+                  </option>
+                ))}
               </Select>
             </div>
             <div>
